@@ -512,7 +512,7 @@ export default function MapPage() {
         </div>
 
         {/* Search */}
-        <div className="search-section relative z-30 px-5 py-5 opacity-0" style={{ borderBottom: '1px solid #eef0f4', backgroundColor: '#fff' }}>
+        <div className="search-section relative z-30 px-5 py-5 opacity-0 bg-white border-b border-[#eef0f4]">
           <div className="relative">
             <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: '#9aa0b8' }} />
             <Input
