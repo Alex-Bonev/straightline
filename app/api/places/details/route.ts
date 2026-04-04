@@ -61,6 +61,7 @@ export async function GET(request: NextRequest) {
       relativeTime: rev.relative_time_description,
     })),
     photoRef: r.photos?.[0]?.photo_reference ?? null,
+    photoRefs: (r.photos ?? []).slice(0, 4).map((p: { photo_reference: string }) => p.photo_reference),
   }
 
   return Response.json({ detail })

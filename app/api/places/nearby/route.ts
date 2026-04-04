@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
     userRatingsTotal: p.user_ratings_total ?? 0,
     types: p.types ?? [],
     openNow: p.opening_hours?.open_now ?? null,
+    photoRef: p.photos?.[0]?.photo_reference ?? null,
   })).filter((p: any) => p.location !== null)
 
   return Response.json({ places })

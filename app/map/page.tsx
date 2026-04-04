@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { animate, createScope, stagger } from 'animejs'
+import { animate, createScope } from 'animejs'
 import { Nunito } from 'next/font/google'
 import { Waves } from '@/components/ui/wave-background'
 import { TextScramble } from '@/components/ui/text-scramble'
@@ -13,7 +13,6 @@ import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Search,
   MapPin,
@@ -28,6 +27,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { GoogleMapView, type GoogleMapHandle, type MapPlace } from '@/components/map/google-map'
+import { PlacePanel } from '@/components/map/place-panel'
 
 const nunito = Nunito({
   subsets: ['latin'],
@@ -43,6 +43,7 @@ interface Place {
   userRatingsTotal: number
   types: string[]
   openNow: boolean | null
+  photoRef?: string | null
   score?: {
     grade: string
     tags: string[]
@@ -139,71 +140,68 @@ function LocationCard({ place, selected, onClick }: { place: Place; selected: bo
   const gradeConfig = grade ? getGradeConfig(grade) : null
   const glowVars    = grade ? getGlowVars(grade) : null
   const accentColor = gradeConfig?.bg ?? '#1a73e8'
+  const photoUrl    = place.photoRef
+    ? `/api/places/photo?ref=${encodeURIComponent(place.photoRef)}&w=200`
+    : null
 
   return (
     <Card
       onClick={onClick}
-      className={`location-card relative flex-row gap-0 overflow-hidden rounded-2xl border-[#eaecf0] p-0 shadow-sm transition-all duration-200 hover:shadow-[0_4px_24px_rgba(0,0,0,0.10)] hover:border-[#c8d0e0] cursor-pointer group ${selected ? 'border-[#1a73e8] shadow-[0_4px_24px_rgba(26,115,232,0.18)]' : ''}`}
+      className={`relative flex-row gap-0 overflow-hidden rounded-2xl border p-0 shadow-sm transition-all duration-200 cursor-pointer group h-[76px]
+        ${selected
+          ? 'border-[#1a73e8] shadow-[0_4px_20px_rgba(26,115,232,0.22)] bg-[#f0f6ff]'
+          : 'border-[#eaecf0] hover:shadow-[0_4px_16px_rgba(0,0,0,0.09)] hover:border-[#c8d0e0]'
+        }`}
     >
-      {glowVars && (
+      {glowVars && !selected && (
         <div className="pointer-events-none absolute inset-x-0 top-0 z-0" style={glowVars}>
-          <Glow variant="top" className="opacity-[0.13]" />
+          <Glow variant="top" className="opacity-[0.12]" />
         </div>
       )}
 
-      <div className="relative z-10 w-28 flex-shrink-0 overflow-hidden" style={{ backgroundColor: accentColor + '12' }}>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: accentColor + '22' }}>
-            <MapPin size={20} style={{ color: accentColor }} />
+      {/* Photo thumbnail — no z-10 so it doesn't leak into the sidebar stacking context */}
+      <div className="relative w-[68px] flex-shrink-0 overflow-hidden h-full">
+        {photoUrl ? (
+          <img
+            src={photoUrl}
+            alt={place.name}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center" style={{ backgroundColor: accentColor + '14' }}>
+            <MapPin size={18} style={{ color: accentColor }} />
           </div>
-        </div>
+        )}
       </div>
 
-      <div className="relative z-10 flex min-w-0 flex-1 flex-col justify-center px-4 py-4">
-        <h3 className="truncate text-[15px] font-bold leading-snug transition-colors group-hover:text-[#1a73e8]" style={{ color: '#1a2035' }}>
-          {place.name}
-        </h3>
-        <p className="mt-1.5 flex items-center gap-1.5 text-[12px] font-medium" style={{ color: '#6b7a99' }}>
-          <MapPin size={10} className="flex-shrink-0" />
+      <div className="relative flex min-w-0 flex-1 flex-col justify-center px-3.5 py-3">
+        <div className="flex items-center gap-2">
+          <h3 className="truncate text-[13.5px] font-bold leading-snug transition-colors"
+            style={{ color: selected ? '#1a52b4' : '#1a2035' }}>
+            {place.name}
+          </h3>
+          {place.scoring && <Loader2 size={11} className="animate-spin flex-shrink-0" style={{ color: '#9aa0b8' }} />}
+          {grade && !place.scoring && (
+            <span className="flex-shrink-0 rounded-full px-1.5 py-[2px] text-[9px] font-black text-white leading-none"
+              style={{ backgroundColor: gradeConfig?.bg }}>
+              {grade}
+            </span>
+          )}
+        </div>
+        <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium truncate" style={{ color: '#6b7a99' }}>
+          <MapPin size={9} className="flex-shrink-0" />
           <span className="truncate">{place.address}</span>
         </p>
-        {place.rating !== null && (
-          <p className="mt-0.5 text-[12px] font-medium" style={{ color: '#6b7a99' }}>
-            ★ <span className="font-semibold" style={{ color: '#3c5080' }}>{place.rating}</span>
-            <span className="opacity-40"> · </span>
-            {place.userRatingsTotal.toLocaleString()} reviews
-          </p>
-        )}
         {place.score && place.score.tags.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {place.score.tags.map((tag) => (
-              <Badge key={tag} className="inline-flex h-auto items-center gap-1 rounded-full border-none px-2 py-[3px] text-[10px] font-semibold leading-none" style={{ backgroundColor: '#e8f0fe', color: '#1a52b4' }}>
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {place.score.tags.slice(0, 3).map((tag) => (
+              <Badge key={tag} className="inline-flex h-auto items-center gap-0.5 rounded-full border-none px-1.5 py-[2px] text-[9px] font-semibold leading-none"
+                style={{ backgroundColor: selected ? '#dce8fe' : '#e8f0fe', color: '#1a52b4' }}>
                 {tagIcon(tag)}
                 {tag}
               </Badge>
             ))}
           </div>
-        )}
-        {place.score?.summary && (
-          <p className="mt-2 text-[11px] leading-relaxed line-clamp-2" style={{ color: '#6b7a99' }}>
-            {place.score.summary}
-          </p>
-        )}
-      </div>
-
-      <div
-        className="relative z-10 flex w-[54px] flex-shrink-0 flex-col items-center justify-center gap-1"
-        style={gradeConfig ? { backgroundColor: gradeConfig.bg, borderLeft: `1px solid ${gradeConfig.border}` } : { backgroundColor: '#f0f3fa', borderLeft: '1px solid #e4e8f0' }}
-      >
-        {place.scoring ? (
-          <Loader2 size={17} className="animate-spin" style={{ color: gradeConfig?.bg ?? '#9aa0b8' }} />
-        ) : grade ? (
-          <>
-            <span className="text-[18px] font-black leading-none tracking-tight text-white">{grade}</span>
-            <span className="text-[7px] font-bold uppercase tracking-widest text-white/65">score</span>
-          </>
-        ) : (
-          <span className="text-[13px] font-semibold" style={{ color: '#b0b8d0' }}>—</span>
         )}
       </div>
     </Card>
@@ -215,8 +213,9 @@ const MAPS_KEY = process.env.NEXT_PUBLIC_MAPS_KEY ?? ''
 export default function MapPage() {
   const sidebarRef    = useRef<HTMLDivElement>(null)
   const scopeRef      = useRef<{ revert: () => void } | null>(null)
-  const mapHandleRef  = useRef<GoogleMapHandle>(null)
-  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mapHandleRef    = useRef<GoogleMapHandle>(null)
+  const searchTimeout   = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const nearbyPlacesRef = useRef<Place[]>([])
 
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [mapCenter, setMapCenter]       = useState<{ lat: number; lng: number }>({ lat: 32.8801, lng: -117.2340 })
@@ -228,6 +227,8 @@ export default function MapPage() {
   const [query, setQuery]                     = useState('')
   const [suggestions, setSuggestions]         = useState<Suggestion[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [visibleCount, setVisibleCount]       = useState(5)
+  const [searchError, setSearchError]         = useState<string | null>(null)
 
   useEffect(() => {
     scopeRef.current = createScope({ root: sidebarRef }).add(() => {
@@ -251,6 +252,9 @@ export default function MapPage() {
       })
       const scoreData = await scoreRes.json()
       setPlaces((prev) => prev.map((p) => p.placeId === placeId ? { ...p, scoring: false, score: scoreData.score } : p))
+      nearbyPlacesRef.current = nearbyPlacesRef.current.map((p) =>
+        p.placeId === placeId ? { ...p, scoring: false, score: scoreData.score } : p
+      )
     } catch {
       setPlaces((prev) => prev.map((p) => p.placeId === placeId ? { ...p, scoring: false } : p))
     }
@@ -258,22 +262,102 @@ export default function MapPage() {
 
   const fetchNearby = useCallback(async (loc: { lat: number; lng: number }) => {
     setLoading(true)
+    setVisibleCount(5)
+    setSearchError(null)
     try {
       const res  = await fetch(`/api/places/nearby?lat=${loc.lat}&lng=${loc.lng}&radius=1500`)
       const data = await res.json()
       const raw: Place[] = (data.places ?? []).map((p: Place) => ({
         placeId: p.placeId, name: p.name, address: p.address, location: p.location,
         rating: p.rating, userRatingsTotal: p.userRatingsTotal, types: p.types, openNow: p.openNow,
+        photoRef: p.photoRef ?? null,
       }))
+      nearbyPlacesRef.current = raw
       setPlaces(raw)
-      setTimeout(() => {
-        animate('.location-card', { translateX: [-30, 0], opacity: [0, 1], delay: stagger(60, { start: 0 }), duration: 450, ease: 'outExpo' })
-      }, 50)
+      // Do NOT auto-select on boot — user picks their own first result
       ;(async () => { for (const p of raw.slice(0, 5)) await scorePlace(p.placeId) })()
     } finally {
       setLoading(false)
     }
   }, [scorePlace])
+
+  const handleSearch = useCallback(async (searchQuery: string) => {
+    if (!searchQuery.trim()) return
+    setLoading(true)
+    setVisibleCount(5)
+    setSearchError(null)
+    setShowSuggestions(false)
+    setSuggestions([])
+    try {
+      const loc = userLocation ?? mapCenter
+      const res  = await fetch(`/api/places/search?query=${encodeURIComponent(searchQuery)}&lat=${loc.lat}&lng=${loc.lng}`)
+      const data = await res.json()
+      if (data.error) {
+        setSearchError(`Search failed: ${data.error}${data.details ? ` — ${data.details}` : ''}`)
+        setPlaces([])
+        return
+      }
+      const raw: Place[] = (data.places ?? []).map((p: Place) => ({
+        placeId: p.placeId, name: p.name, address: p.address, location: p.location,
+        rating: p.rating, userRatingsTotal: p.userRatingsTotal, types: p.types, openNow: p.openNow,
+        photoRef: p.photoRef ?? null,
+      }))
+      if (raw.length === 0) {
+        // nearbysearch+keyword is strict — fall back to autocomplete→details for fuzzy name matching
+        const acRes  = await fetch(`/api/places/autocomplete?query=${encodeURIComponent(searchQuery)}&lat=${loc.lat}&lng=${loc.lng}`)
+        const acData = await acRes.json()
+        const acSuggestions: Suggestion[] = acData.suggestions ?? []
+
+        if (acSuggestions.length === 0) {
+          setSearchError('No results found. Try a different search.')
+          setPlaces([])
+          return
+        }
+
+        const detailResults = await Promise.all(
+          acSuggestions.slice(0, 5).map(s =>
+            fetch(`/api/places/details?placeId=${s.placeId}`)
+              .then(r => r.json())
+              .then(d => d.detail ?? null)
+              .catch(() => null)
+          )
+        )
+
+        const fallback: Place[] = detailResults
+          .filter(Boolean)
+          .map((d) => ({
+            placeId: d.placeId, name: d.name, address: d.address, location: d.location,
+            rating: d.rating, userRatingsTotal: d.userRatingsTotal, types: d.types,
+            openNow: d.openNow, photoRef: d.photoRef ?? null,
+          }))
+          .filter(p => p.location != null)
+
+        if (fallback.length === 0) {
+          setSearchError('No results found. Try a different search.')
+          setPlaces([])
+          return
+        }
+
+        setPlaces(fallback)
+        setSelectedId(fallback[0].placeId)
+        setMapCenter(fallback[0].location)
+        mapHandleRef.current?.focusPlace(fallback[0].location)
+        ;(async () => { for (const p of fallback.slice(0, 5)) await scorePlace(p.placeId) })()
+        return
+      }
+
+      setPlaces(raw)
+      setSelectedId(raw[0].placeId)
+      setMapCenter(raw[0].location)
+      mapHandleRef.current?.focusPlace(raw[0].location)
+      ;(async () => { for (const p of raw.slice(0, 5)) await scorePlace(p.placeId) })()
+    } catch (err) {
+      setSearchError(`Request failed: ${err instanceof Error ? err.message : 'unknown error'}`)
+      setPlaces([])
+    } finally {
+      setLoading(false)
+    }
+  }, [userLocation, mapCenter, scorePlace])
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
@@ -292,16 +376,34 @@ export default function MapPage() {
   }, [fetchNearby])
 
   const selectPlace = useCallback((place: Place) => {
+    if (selectedId === place.placeId) {
+      setSelectedId(null)
+      return
+    }
     setSelectedId(place.placeId)
     setMapCenter(place.location)
     mapHandleRef.current?.focusPlace(place.location)
     if (!place.score && !place.scoring) scorePlace(place.placeId)
-  }, [scorePlace])
+  }, [selectedId, scorePlace])
 
   const handleQueryChange = (value: string) => {
     setQuery(value)
     if (searchTimeout.current) clearTimeout(searchTimeout.current)
-    if (!value.trim()) { setSuggestions([]); setShowSuggestions(false); return }
+    if (!value.trim()) {
+      setSuggestions([])
+      setShowSuggestions(false)
+      setSearchError(null)
+      setVisibleCount(5)
+      // Restore nearby places; if selected place came from a search, keep it at the front
+      const nearby = nearbyPlacesRef.current
+      if (selectedId && !nearby.some(p => p.placeId === selectedId)) {
+        const sel = places.find(p => p.placeId === selectedId)
+        setPlaces(sel ? [sel, ...nearby] : nearby)
+      } else {
+        setPlaces(nearby)
+      }
+      return
+    }
     searchTimeout.current = setTimeout(async () => {
       const loc = userLocation ?? mapCenter
       const res  = await fetch(`/api/places/autocomplete?query=${encodeURIComponent(value)}&lat=${loc.lat}&lng=${loc.lng}`)
@@ -328,7 +430,20 @@ export default function MapPage() {
     if (userLocation) { setMapCenter({ ...userLocation }); mapHandleRef.current?.focusPlace(userLocation) }
   }
 
-  const mapPlaces: MapPlace[] = places.map((p) => ({ placeId: p.placeId, name: p.name, location: p.location, grade: p.score?.grade }))
+  const mapPlaces: MapPlace[]   = places.map((p) => ({ placeId: p.placeId, name: p.name, location: p.location, grade: p.score?.grade }))
+  const selectedPlace           = places.find(p => p.placeId === selectedId) ?? null
+
+  // Show selected card first, then rest in original order
+  const displayedPlaces = (() => {
+    const visible = places.slice(0, visibleCount)
+    if (!selectedId) return visible
+    const selIdx = visible.findIndex(p => p.placeId === selectedId)
+    if (selIdx <= 0) return visible
+    const reordered = [...visible]
+    reordered.splice(selIdx, 1)
+    reordered.unshift(visible[selIdx])
+    return reordered
+  })()
 
   return (
     <div className={`${nunito.className} relative h-screen overflow-hidden bg-[#dce8fb]`}>
@@ -341,6 +456,7 @@ export default function MapPage() {
           center={mapCenter}
           places={mapPlaces}
           selectedPlaceId={selectedId}
+          userLocation={userLocation}
           onMarkerClick={(placeId) => { const place = places.find((p) => p.placeId === placeId); if (place) selectPlace(place) }}
           onReady={() => setMapLoaded(true)}
         />
@@ -367,6 +483,15 @@ export default function MapPage() {
         >
           <Locate size={18} style={{ color: '#1a73e8' }} />
         </Button>
+
+        {/* Place detail panel */}
+        {selectedPlace && (
+          <PlacePanel
+            key={selectedPlace.placeId}
+            place={selectedPlace}
+            onClose={() => setSelectedId(null)}
+          />
+        )}
       </main>
 
       {/* Floating sidebar */}
@@ -387,12 +512,13 @@ export default function MapPage() {
         </div>
 
         {/* Search */}
-        <div className="search-section relative px-5 py-5 opacity-0" style={{ borderBottom: '1px solid #eef0f4' }}>
+        <div className="search-section relative z-30 px-5 py-5 opacity-0" style={{ borderBottom: '1px solid #eef0f4', backgroundColor: '#fff' }}>
           <div className="relative">
             <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: '#9aa0b8' }} />
             <Input
               value={query}
               onChange={(e) => handleQueryChange(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(query) }}
               onFocus={(e) => {
                 if (suggestions.length > 0) setShowSuggestions(true)
                 e.currentTarget.style.backgroundColor = '#fff'
@@ -431,7 +557,7 @@ export default function MapPage() {
               <p className="mb-2 px-1 text-[9px] font-black uppercase tracking-[0.18em]" style={{ color: '#b0b8d0' }}>Try searching</p>
               <div className="flex flex-col gap-0.5">
                 {SUGGESTED_PROMPTS.map((prompt, i) => (
-                  <Button key={i} variant="ghost" onClick={() => handleQueryChange(prompt)} className="h-auto w-full justify-start rounded-xl px-3 py-2.5 text-left hover:bg-[#f0f4ff]" style={{ color: '#1a52b4' }}>
+                  <Button key={i} variant="ghost" onClick={() => { setQuery(prompt); handleSearch(prompt) }} className="h-auto w-full justify-start rounded-xl px-3 py-2.5 text-left hover:bg-[#f0f4ff]" style={{ color: '#1a52b4' }}>
                     <div className="mr-3 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: '#e8f0fe' }}>
                       <Search size={10} style={{ color: '#1a73e8' }} />
                     </div>
@@ -445,8 +571,8 @@ export default function MapPage() {
         </div>
 
         {/* Nearby list */}
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <div className="nearby-header flex items-center justify-between px-6 pb-4 pt-5 opacity-0">
+        <div className="flex flex-1 flex-col overflow-hidden min-h-0">
+          <div className="nearby-header flex items-center justify-between px-6 pb-4 pt-5 opacity-0 flex-shrink-0">
             <div className="flex items-center gap-2">
               <Layers size={14} style={{ color: '#1a73e8' }} />
               <h2 className="text-[13px] font-black uppercase tracking-[0.06em]" style={{ color: '#1a2035' }}>
@@ -458,19 +584,44 @@ export default function MapPage() {
             </Badge>
           </div>
 
-          <Separator style={{ backgroundColor: '#eef0f4' }} />
+          <Separator style={{ backgroundColor: '#eef0f4' }} className="flex-shrink-0" />
 
-          <ScrollArea className="flex-1">
-            <div className="flex flex-col gap-3 px-5 py-4">
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <div className="flex flex-col gap-2.5 px-5 py-4">
               {loading ? (
-                [...Array(5)].map((_, i) => <Skeleton key={i} className="h-[96px] w-full rounded-2xl" />)
+                [...Array(5)].map((_, i) => <Skeleton key={i} className="h-[76px] w-full rounded-2xl" />)
+              ) : searchError ? (
+                <p className="rounded-xl px-2 py-3 text-[13px] font-medium" style={{ color: '#d93025', backgroundColor: '#fce8e6' }}>{searchError}</p>
               ) : (
-                places.map((place) => (
-                  <LocationCard key={place.placeId} place={place} selected={selectedId === place.placeId} onClick={() => selectPlace(place)} />
-                ))
+                <>
+                  <AnimatePresence mode="popLayout" initial={false}>
+                    {displayedPlaces.map((place) => (
+                      <motion.div
+                        key={place.placeId}
+                        layout
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -12, scale: 0.97 }}
+                        transition={{ duration: 0.32, ease: [0.25, 0.46, 0.45, 0.94] }}
+                      >
+                        <LocationCard place={place} selected={selectedId === place.placeId} onClick={() => selectPlace(place)} />
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                  {visibleCount < places.length && (
+                    <Button
+                      variant="ghost"
+                      onClick={() => setVisibleCount((c) => c + 5)}
+                      className="w-full rounded-xl py-3 text-[13px] font-semibold hover:bg-[#f0f4ff]"
+                      style={{ color: '#1a52b4' }}
+                    >
+                      Show {Math.min(5, places.length - visibleCount)} more
+                    </Button>
+                  )}
+                </>
               )}
             </div>
-          </ScrollArea>
+          </div>
         </div>
       </aside>
     </div>
