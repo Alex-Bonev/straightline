@@ -257,7 +257,12 @@ export default function MapPage() {
         })
       }, 50)
 
-      raw.slice(0, 5).forEach((p) => scorePlace(p.placeId))
+      // Score top 5 sequentially to avoid rate-limit issues
+      ;(async () => {
+        for (const p of raw.slice(0, 5)) {
+          await scorePlace(p.placeId)
+        }
+      })()
     } finally {
       setLoading(false)
     }

@@ -8,6 +8,11 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: 'placeId required' }, { status: 400 })
   }
 
+  const apiKey = process.env.MAPS_KEY
+  if (!apiKey) {
+    return Response.json({ error: 'Server misconfiguration: MAPS_KEY not set' }, { status: 500 })
+  }
+
   const fields = [
     'place_id',
     'name',
@@ -27,7 +32,7 @@ export async function GET(request: NextRequest) {
   const url = new URL('https://maps.googleapis.com/maps/api/place/details/json')
   url.searchParams.set('place_id', placeId)
   url.searchParams.set('fields', fields)
-  url.searchParams.set('key', process.env.MAPS_KEY!)
+  url.searchParams.set('key', apiKey)
 
   const res = await fetch(url.toString())
   const data = await res.json()

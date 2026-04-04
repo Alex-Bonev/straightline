@@ -10,11 +10,16 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: 'lat and lng required' }, { status: 400 })
   }
 
+  const apiKey = process.env.MAPS_KEY
+  if (!apiKey) {
+    return Response.json({ error: 'Server misconfiguration: MAPS_KEY not set' }, { status: 500 })
+  }
+
   const url = new URL('https://maps.googleapis.com/maps/api/place/nearbysearch/json')
   url.searchParams.set('location', `${lat},${lng}`)
   url.searchParams.set('radius', radius)
   url.searchParams.set('type', 'establishment')
-  url.searchParams.set('key', process.env.MAPS_KEY!)
+  url.searchParams.set('key', apiKey)
 
   const res = await fetch(url.toString())
   const data = await res.json()
@@ -27,12 +32,12 @@ export async function GET(request: NextRequest) {
     placeId: p.place_id,
     name: p.name,
     address: p.vicinity,
-    location: p.geometry.location,
+    location: p.geometry?.location ?? null,
     rating: p.rating ?? null,
     userRatingsTotal: p.user_ratings_total ?? 0,
     types: p.types ?? [],
     openNow: p.opening_hours?.open_now ?? null,
-  }))
+  })).filter((p: any) => p.location !== null)
 
   return Response.json({ places })
 }

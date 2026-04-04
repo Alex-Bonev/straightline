@@ -10,9 +10,14 @@ export async function GET(request: NextRequest) {
     return Response.json({ suggestions: [] })
   }
 
+  const apiKey = process.env.MAPS_KEY
+  if (!apiKey) {
+    return Response.json({ error: 'Server misconfiguration: MAPS_KEY not set' }, { status: 500 })
+  }
+
   const url = new URL('https://maps.googleapis.com/maps/api/place/autocomplete/json')
   url.searchParams.set('input', query)
-  url.searchParams.set('key', process.env.MAPS_KEY!)
+  url.searchParams.set('key', apiKey)
   if (lat && lng) {
     url.searchParams.set('location', `${lat},${lng}`)
     url.searchParams.set('radius', '10000')
@@ -28,8 +33,8 @@ export async function GET(request: NextRequest) {
   const suggestions = (data.predictions ?? []).slice(0, 6).map((p: any) => ({
     placeId: p.place_id,
     description: p.description,
-    mainText: p.structured_formatting.main_text,
-    secondaryText: p.structured_formatting.secondary_text ?? '',
+    mainText: p.structured_formatting?.main_text ?? p.description,
+    secondaryText: p.structured_formatting?.secondary_text ?? '',
   }))
 
   return Response.json({ suggestions })
