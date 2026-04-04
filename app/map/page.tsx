@@ -26,8 +26,10 @@ import {
   ChevronRight,
   Locate,
   Loader2,
+  Box,
 } from 'lucide-react'
 import { GoogleMapView, type GoogleMapHandle, type MapPlace } from '@/components/map/google-map'
+import { SplatViewer } from '@/components/splat/splat-viewer'
 
 const nunito = Nunito({
   subsets: ['latin'],
@@ -134,7 +136,7 @@ const SUGGESTED_PROMPTS = [
   'Accessible transit stations',
 ]
 
-function LocationCard({ place, selected, onClick }: { place: Place; selected: boolean; onClick: () => void }) {
+function LocationCard({ place, selected, onClick, onView3D }: { place: Place; selected: boolean; onClick: () => void; onView3D: (place: Place) => void }) {
   const grade       = place.score?.grade
   const gradeConfig = grade ? getGradeConfig(grade) : null
   const glowVars    = grade ? getGlowVars(grade) : null
@@ -189,6 +191,14 @@ function LocationCard({ place, selected, onClick }: { place: Place; selected: bo
             {place.score.summary}
           </p>
         )}
+        <button
+          onClick={(e) => { e.stopPropagation(); onView3D(place) }}
+          className="mt-3 inline-flex h-7 items-center gap-1.5 rounded-full px-3 text-[11px] font-semibold transition-colors hover:bg-[#1a73e8] hover:text-white"
+          style={{ backgroundColor: '#e8f0fe', color: '#1a52b4' }}
+        >
+          <Box size={11} />
+          View in 3D
+        </button>
       </div>
 
       <div
@@ -228,6 +238,9 @@ export default function MapPage() {
   const [query, setQuery]                     = useState('')
   const [suggestions, setSuggestions]         = useState<Suggestion[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
+
+  const [showSplatViewer, setShowSplatViewer] = useState(false)
+  const [splatPlaceId, setSplatPlaceId]       = useState<string | null>(null)
 
   useEffect(() => {
     scopeRef.current = createScope({ root: sidebarRef }).add(() => {
@@ -269,7 +282,8 @@ export default function MapPage() {
       setTimeout(() => {
         animate('.location-card', { translateX: [-30, 0], opacity: [0, 1], delay: stagger(60, { start: 0 }), duration: 450, ease: 'outExpo' })
       }, 50)
-      ;(async () => { for (const p of raw.slice(0, 5)) await scorePlace(p.placeId) })()
+      // Auto-scoring disabled — set ANTHROPIC_API_KEY in .env to enable
+      // ;(async () => { for (const p of raw.slice(0, 5)) await scorePlace(p.placeId) })()
     } finally {
       setLoading(false)
     }
@@ -327,6 +341,11 @@ export default function MapPage() {
   const handleLocateMe = () => {
     if (userLocation) { setMapCenter({ ...userLocation }); mapHandleRef.current?.focusPlace(userLocation) }
   }
+
+  const handleView3D = useCallback((place: Place) => {
+    setSplatPlaceId(place.placeId)
+    setShowSplatViewer(true)
+  }, [])
 
   const mapPlaces: MapPlace[] = places.map((p) => ({ placeId: p.placeId, name: p.name, location: p.location, grade: p.score?.grade }))
 
@@ -466,13 +485,25 @@ export default function MapPage() {
                 [...Array(5)].map((_, i) => <Skeleton key={i} className="h-[96px] w-full rounded-2xl" />)
               ) : (
                 places.map((place) => (
-                  <LocationCard key={place.placeId} place={place} selected={selectedId === place.placeId} onClick={() => selectPlace(place)} />
+                  <LocationCard key={place.placeId} place={place} selected={selectedId === place.placeId} onClick={() => selectPlace(place)} onView3D={handleView3D} />
                 ))
               )}
             </div>
           </ScrollArea>
         </div>
       </aside>
+
+      {/* Full-screen splat viewer overlay */}
+      {showSplatViewer && splatPlaceId && (
+        <SplatViewer
+          modelUrl="/mock-model.ply"
+          placeId={splatPlaceId}
+          onClose={() => {
+            setShowSplatViewer(false)
+            setSplatPlaceId(null)
+          }}
+        />
+      )}
     </div>
   )
 }
