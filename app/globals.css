@@ -49,6 +49,10 @@
 }
 
 :root {
+  /* Brand palette — consumed by the Glow component as space-separated HSL */
+  --brand: 211 80% 55%;
+  --brand-foreground: 211 80% 72%;
+
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
