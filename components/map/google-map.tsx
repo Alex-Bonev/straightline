@@ -26,6 +26,7 @@ interface Props {
   selectedPlaceId?: string | null
   onMarkerClick?: (placeId: string) => void
   onReady?: () => void
+  userLocation?: { lat: number; lng: number } | null
 }
 
 function gradeToColor(grade?: string): string {
@@ -40,7 +41,7 @@ function gradeToColor(grade?: string): string {
 
 // Inner component — has access to the map instance via useMap()
 const MapInner = forwardRef<GoogleMapHandle, Props>(function MapInner(
-  { center, places, selectedPlaceId, onMarkerClick, onReady },
+  { center, places, selectedPlaceId, onMarkerClick, onReady, userLocation },
   ref
 ) {
   const map = useMap()
@@ -71,6 +72,18 @@ const MapInner = forwardRef<GoogleMapHandle, Props>(function MapInner(
 
   return (
     <>
+      {userLocation && (
+        <AdvancedMarker position={userLocation} title="Your location" zIndex={1000}>
+          <div style={{
+            width: 18,
+            height: 18,
+            borderRadius: '50%',
+            backgroundColor: '#1a73e8',
+            border: '3px solid #fff',
+            boxShadow: '0 2px 10px rgba(26,115,232,0.55)',
+          }} />
+        </AdvancedMarker>
+      )}
       {places.map((place) => (
         <AdvancedMarker
           key={place.placeId}
