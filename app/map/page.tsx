@@ -509,7 +509,11 @@ export default function MapPage() {
         style={{ boxShadow: '0 8px 40px rgba(0,158,133,0.13), 0 2px 12px rgba(0,0,0,0.07)' }}
       >
         {/* Header */}
-        <div className="sidebar-header flex items-center gap-4 px-6 py-5 opacity-0" style={{ borderBottom: '1px solid #eef0f4' }}>
+        <a
+          href="/"
+          className="sidebar-header flex items-center gap-4 px-6 py-5 opacity-0 cursor-pointer"
+          style={{ borderBottom: '1px solid #eef0f4', textDecoration: 'none' }}
+        >
           <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: '#009E85' }}>
             <Navigation size={16} className="text-white" />
           </div>
@@ -519,7 +523,7 @@ export default function MapPage() {
             </h1>
             <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: '#8a9abf' }}>Accessibility Navigation</p>
           </div>
-        </div>
+        </a>
 
         {/* Search */}
         <div className="search-section relative z-30 px-5 py-5 opacity-0 bg-white border-b border-[#eef0f4]">

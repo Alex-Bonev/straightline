@@ -40,22 +40,22 @@ const T = {
 };
 
 function scoreColor(s: number) {
-  if (s >= 90) return "#00A870";
-  if (s >= 75) return "#D4820A";
+  if (s >= 9) return "#00A870";
+  if (s >= 7) return "#D4820A";
   return "#C0392B";
 }
 
 // ─── Frame data ───────────────────────────────────────────────────────────────
 
 const FRAMES = [
-  { src: "https://images.unsplash.com/photo-1497366216548-37526070297c?w=520&q=80", label: "SFO Terminal 3",         score: 91 },
-  { src: "https://images.unsplash.com/photo-1488972685288-c3fd157d7c7a?w=520&q=80", label: "Metro Plaza Hub",         score: 96 },
-  { src: "https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=520&q=80", label: "City Hall",               score: 79 },
-  { src: "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=520&q=80",   label: "Lincoln Library",         score: 94 },
-  { src: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=520&q=80", label: "Westfield Mall",          score: 87 },
-  { src: "https://images.unsplash.com/photo-1470770841072-f978cf4d019e?w=520&q=80", label: "Millennium Park",         score: 93 },
-  { src: "https://images.unsplash.com/photo-1564501049412-61c2a3083791?w=520&q=80", label: "The Broad Museum",        score: 97 },
-  { src: "https://images.unsplash.com/photo-1576941089067-2de3c901e126?w=520&q=80", label: "Oceanside Medical Ctr.",  score: 90 },
+  { src: "https://images.unsplash.com/photo-1497366216548-37526070297c?w=520&q=80", label: "SFO Terminal 3",         score: 8 },
+  { src: "https://images.unsplash.com/photo-1488972685288-c3fd157d7c7a?w=520&q=80", label: "Metro Plaza Hub",         score: 10 },
+  { src: "https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=520&q=80", label: "City Hall",               score: 7 },
+  { src: "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=520&q=80",   label: "Lincoln Library",         score: 9 },
+  { src: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=520&q=80", label: "Westfield Mall",          score: 8 },
+  { src: "https://images.unsplash.com/photo-1470770841072-f978cf4d019e?w=520&q=80", label: "Millennium Park",         score: 9 },
+  { src: "https://images.unsplash.com/photo-1564501049412-61c2a3083791?w=520&q=80", label: "The Broad Museum",        score: 10 },
+  { src: "https://images.unsplash.com/photo-1576941089067-2de3c901e126?w=520&q=80", label: "Oceanside Medical Ctr.",  score: 9 },
 ];
 
 type Cfg = { x: number; speed: number; rot: number; w: number; h: number; depth: number };
@@ -155,11 +155,9 @@ export default function Home() {
         {/* Tagline */}
         <motion.p
           initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.85, delay: 0.42 }}
-          style={{ fontFamily: "var(--font-geist-sans)", fontSize: "1.1rem", fontWeight: 400, color: T.tagline, lineHeight: 1.5, marginBottom: "0.9rem", maxWidth: "370px" }}
+          style={{ fontFamily: "var(--font-geist-sans)", fontSize: "1.1rem", fontWeight: 400, color: T.tagline, lineHeight: 1.5, marginBottom: "0.9rem", whiteSpace: "nowrap" }}
         >
-          Know the space.
-          <br />
-          Before you&rsquo;re there.
+          Know the space <em style={{ fontStyle: "italic", color: T.teal }}>before</em>&nbsp; you&rsquo;re there.
         </motion.p>
 
         {/* Description */}
@@ -241,15 +239,15 @@ export default function Home() {
               </div>
               <div style={{ padding: "7px 10px 8px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
                 <div style={{ minWidth: 0 }}>
-                  <p style={{ fontFamily: "var(--font-geist-mono)", fontSize: "0.55rem", letterSpacing: "0.09em", color: T.cardText, textTransform: "uppercase", marginBottom: "1px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <p style={{ fontFamily: "var(--font-geist-sans)", fontSize: "0.55rem", letterSpacing: "0.04em", color: T.cardText, textTransform: "uppercase", marginBottom: "1px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {frame.label}
                   </p>
-                  <p style={{ fontFamily: "var(--font-geist-mono)", fontSize: "0.46rem", color: T.cardSubText, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                  <p style={{ fontFamily: "var(--font-geist-sans)", fontSize: "0.46rem", color: T.cardSubText, letterSpacing: "0.02em", textTransform: "uppercase" }}>
                     ADA Compliance
                   </p>
                 </div>
-                <div style={{ width: 30, height: 30, borderRadius: "50%", background: sCol, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <span style={{ fontFamily: "var(--font-geist-mono)", fontSize: "0.48rem", fontWeight: 700, color: "#F0E9D6" }}>{frame.score}</span>
+                <div style={{ width: 34, height: 30, borderRadius: "4px", background: sCol, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <span style={{ fontFamily: "var(--font-geist-sans)", fontSize: "0.6rem", fontWeight: 700, color: "#F0E9D6" }}>{frame.score}/10</span>
                 </div>
               </div>
             </div>
