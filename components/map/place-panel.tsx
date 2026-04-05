@@ -6,10 +6,11 @@ import { animate, stagger } from 'animejs'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EtheralShadow } from '@/components/ui/etheral-shadow'
+import { BGPattern } from '@/components/ui/bg-pattern'
 import { TextScramble } from '@/components/ui/text-scramble'
 import {
   ChevronLeft, ChevronRight, MapPin,
-  Globe, X,
+  Globe, X, Check, Minus, CircleHelp,
 } from 'lucide-react'
 
 interface Place {
@@ -72,10 +73,10 @@ const CHECKLIST_INFO: Record<number, { label: string; explanation: string; adaRe
 
 function statusStyle(status: ChecklistItemStatus) {
   switch (status) {
-    case 'met':     return { icon: '✓', itemBg: '#f0f9f0', itemBorder: '#1e8e3e', iconColor: '#1e8e3e', slideColor: '#1e8e3e' }
-    case 'not_met': return { icon: '✗', itemBg: '#fff8f0', itemBorder: '#fa7b17', iconColor: '#fa7b17', slideColor: '#fa7b17' }
-    case 'na':      return { icon: '—', itemBg: '#f5f5f8', itemBorder: '#ccc',    iconColor: '#9aa0b8', slideColor: '#ccc'    }
-    default:        return { icon: '?', itemBg: '#f5f5f8', itemBorder: '#ccc',    iconColor: '#9aa0b8', slideColor: '#ccc'    }
+    case 'met':     return { icon: <Check size={8} strokeWidth={3} />,       accentColor: '#009E85', iconBg: '#e6f7f5', iconColor: '#009E85', slideColor: '#009E85' }
+    case 'not_met': return { icon: <X size={8} strokeWidth={3} />,           accentColor: '#e07060', iconBg: '#fdf0ee', iconColor: '#e07060', slideColor: '#e07060' }
+    case 'na':      return { icon: <Minus size={8} strokeWidth={2.5} />,     accentColor: '#c8cdd8', iconBg: '#f0f2f5', iconColor: '#a0a8bc', slideColor: '#c8cdd8' }
+    default:        return { icon: <CircleHelp size={8} strokeWidth={2} />,  accentColor: '#c8cdd8', iconBg: '#f0f2f5', iconColor: '#a0a8bc', slideColor: '#c8cdd8' }
   }
 }
 
@@ -90,56 +91,67 @@ function ChecklistRow({
 }) {
   const info = CHECKLIST_INFO[item.id]
   if (!info) return null
-  const { icon, itemBg, itemBorder, iconColor, slideColor } = statusStyle(item.status)
+  const { icon, accentColor, iconBg, iconColor, slideColor } = statusStyle(item.status)
 
   return (
     <div>
       {/* Row */}
       <div style={{
-        background: itemBg,
-        border: `1.5px solid ${itemBorder}`,
+        background: 'white',
         borderRadius: 8,
-        padding: '7px 9px',
+        padding: '6px 9px 6px 6px',
         display: 'flex',
         alignItems: 'center',
         gap: 7,
         position: 'relative',
         zIndex: 2,
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        border: '1px solid rgba(0,0,0,0.06)',
+        overflow: 'hidden',
       }}>
-        <span style={{ color: iconColor, fontSize: 13, flexShrink: 0, width: 14, textAlign: 'center', fontWeight: 700 }}>
+        {/* Left accent */}
+        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: accentColor }} />
+        {/* Status icon bubble */}
+        <div style={{
+          width: 18, height: 18, borderRadius: '50%',
+          background: iconBg, color: iconColor,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0, marginLeft: 5,
+        }}>
           {icon}
-        </span>
-        <span style={{ fontWeight: 700, fontSize: 10.5, color: '#1a2035', flex: 1, minWidth: 0, lineHeight: 1.3 }}>
+        </div>
+        <span style={{ fontWeight: 600, fontSize: 12.5, color: '#1a2035', flex: 1, minWidth: 0, lineHeight: 1.3 }}>
           {info.label}
         </span>
         <button
           onClick={onToggle}
           style={{
             fontSize: 8,
-            fontWeight: 800,
-            letterSpacing: '0.08em',
+            fontWeight: 700,
+            letterSpacing: '0.07em',
             textTransform: 'uppercase',
-            padding: '3px 6px',
-            borderRadius: 4,
-            background: isOpen ? '#007a67' : '#e0f5f1',
-            color: isOpen ? 'white' : '#007a67',
-            border: 'none',
+            padding: '2px 6px',
+            borderRadius: 20,
+            background: isOpen ? accentColor : 'transparent',
+            color: isOpen ? 'white' : '#a0a8bc',
+            border: `1px solid ${isOpen ? accentColor : 'rgba(0,0,0,0.1)'}`,
             cursor: 'pointer',
             flexShrink: 0,
+            transition: 'all 0.18s ease',
           }}
           aria-label={`${isOpen ? 'Hide' : 'Show'} info for ${info.label}`}
         >
-          INFO
+          info
         </button>
       </div>
 
       {/* Slide-out card */}
       <div style={{
-        background: 'white',
-        borderTop: '1.5px solid transparent',
-        borderRight: `1.5px solid ${isOpen ? slideColor : 'transparent'}`,
-        borderBottom: `1.5px solid ${isOpen ? slideColor : 'transparent'}`,
-        borderLeft: `1.5px solid ${isOpen ? slideColor : 'transparent'}`,
+        background: '#fafbfc',
+        borderTop: 'none',
+        borderRight: `1px solid ${isOpen ? 'rgba(0,0,0,0.07)' : 'transparent'}`,
+        borderBottom: `1px solid ${isOpen ? 'rgba(0,0,0,0.07)' : 'transparent'}`,
+        borderLeft: `3px solid ${isOpen ? slideColor : 'transparent'}`,
         borderRadius: '0 0 8px 8px',
         maxHeight: isOpen ? 600 : 0,
         overflow: isOpen ? 'auto' : 'hidden',
@@ -209,12 +221,16 @@ function ChecklistRow({
 function ChecklistSkeleton() {
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 7, padding: '7px 9px',
-      borderRadius: 8, background: '#f5f5f8', border: '1.5px solid #e8eaed',
+      display: 'flex', alignItems: 'center', gap: 7, padding: '6px 9px 6px 6px',
+      borderRadius: 8, background: 'white',
+      border: '1px solid rgba(0,0,0,0.06)',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+      overflow: 'hidden', position: 'relative',
     }}>
-      <Skeleton className="h-3.5 w-3.5 rounded-full flex-shrink-0" />
-      <Skeleton className="h-3 flex-1 rounded" />
-      <Skeleton className="h-4 w-8 rounded" />
+      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: '#c0e8e2' }} />
+      <Skeleton className="h-[18px] w-[18px] rounded-full flex-shrink-0 ml-5 bg-[#c0e8e2]" />
+      <Skeleton className="h-2.5 flex-1 rounded bg-[#c0e8e2]" />
+      <Skeleton className="h-4 w-8 rounded-full bg-[#c0e8e2]" />
     </div>
   )
 }
@@ -490,9 +506,10 @@ export function PlacePanel({
 
         {/* ── 2 · BrowserUse Insights ───────────────────────── */}
         <div
-          className="pp-s opacity-0"
-          style={{ background: 'linear-gradient(160deg, #eef3ff 0%, #edfaf7 100%)', borderBottom: '1px solid #dce6fc' }}
+          className="pp-s relative opacity-0"
+          style={{ background: 'linear-gradient(160deg, #e6f7f5 0%, #edfaf7 100%)', borderBottom: '1px solid #b8e2dc' }}
         >
+          <BGPattern variant="grid" mask="fade-edges" fill="#90cdc6" size={24} />
           {/* Header */}
           <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-0">
             <div className="flex items-center gap-3">
@@ -552,7 +569,7 @@ export function PlacePanel({
             {/* X / 10 count */}
             <div className="flex-shrink-0 text-right">
               {buStatus === 'loading' ? (
-                <Skeleton className="h-7 w-16 rounded-lg" />
+                <Skeleton className="h-7 w-16 rounded-lg bg-[#c0e8e2]" />
               ) : buStatus === 'error' ? (
                 <span className="text-[11px] font-semibold" style={{ color: '#d93025' }}>Scan failed</span>
               ) : (
