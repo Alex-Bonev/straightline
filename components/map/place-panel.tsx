@@ -600,6 +600,7 @@ export function PlacePanel({
             role="button"
             tabIndex={0}
             aria-label="Enter Projective View"
+            onClick={onView3D}
             onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') e.currentTarget.click() }}
           >
             <EtheralShadow

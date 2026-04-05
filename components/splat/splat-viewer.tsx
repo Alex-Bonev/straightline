@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
-import { X, Loader2, PenTool, MessageSquare, Trash2, Tag, GripVertical } from 'lucide-react'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
+import { X, Loader2, PenTool, MessageSquare, Trash2, Tag, ArrowUpDown, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface Annotation {
@@ -19,7 +19,21 @@ interface SplatViewerProps {
   onClose: () => void
 }
 
-const LABEL_OPTIONS = ['ramp', 'elevator', 'accessible_entrance', 'restroom', 'door', 'stairs', 'parking', 'other']
+const LABEL_OPTIONS = ['ramp', 'elevator']
+const GIZMO_SCALE = 0.5 // world units for axis handle length
+const AXIS_COLORS = { x: '#ef4444', y: '#22c55e', z: '#3b82f6' } as const
+type Axis = 'x' | 'y' | 'z'
+
+interface ScreenPos {
+  x: number
+  y: number
+  axisEnds: Record<Axis, { x: number; y: number }>
+}
+
+function LabelIcon({ label, size, className }: { label: string; size?: number; className?: string }) {
+  if (label === 'elevator') return <ArrowUpDown size={size} className={className} />
+  return <TrendingUp size={size} className={className} />
+}
 
 export function SplatViewer({ modelUrl, placeId, onClose }: SplatViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -34,12 +48,21 @@ export function SplatViewer({ modelUrl, placeId, onClose }: SplatViewerProps) {
   const [annotations, setAnnotations] = useState<Annotation[]>([])
   const [pendingPosition, setPendingPosition] = useState<{ x: number; y: number; z: number } | null>(null)
   const [noteText, setNoteText] = useState('')
-  const [selectedLabel, setSelectedLabel] = useState('other')
+  const [selectedLabel, setSelectedLabel] = useState('ramp')
   const [selectedAnnotation, setSelectedAnnotation] = useState<Annotation | null>(null)
+  const [editingAnnotation, setEditingAnnotation] = useState(false)
+  const [editNote, setEditNote] = useState('')
+  const [editLabel, setEditLabel] = useState('ramp')
   const [hoveredAnnotation, setHoveredAnnotation] = useState<string | null>(null)
-  const [screenPositions, setScreenPositions] = useState<Map<string, { x: number; y: number }>>(new Map())
+  const [screenPositions, setScreenPositions] = useState<Map<string, ScreenPos>>(new Map())
   const [draggingId, setDraggingId] = useState<string | null>(null)
-  const dragStartRef = useRef<{ x: number; y: number } | null>(null)
+  const [draggingAxis, setDraggingAxis] = useState<Axis | null>(null)
+  const dragStartRef = useRef<{
+    mouseX: number; mouseY: number
+    pos: { x: number; y: number; z: number }
+    screenDir: { x: number; y: number }
+    screenLen: number
+  } | null>(null)
 
   // Load existing annotations
   useEffect(() => {
@@ -63,9 +86,9 @@ export function SplatViewer({ modelUrl, placeId, onClose }: SplatViewerProps) {
         if (disposed) return
 
         const viewer = new GaussianSplats3D.Viewer({
-          cameraUp: [0, -1, 0],
-          initialCameraPosition: [0, -2, 6],
-          initialCameraLookAt: [0, 0, 0],
+          cameraUp: [0, 1, 0],
+          initialCameraPosition: [0, 0.5, 0.5],
+          initialCameraLookAt: [0, 0.5, -1],
           selfDrivenMode: true,
           useBuiltInControls: true,
           rootElement: containerRef.current!,
@@ -146,7 +169,8 @@ export function SplatViewer({ modelUrl, placeId, onClose }: SplatViewerProps) {
         const canvas = t.renderer?.domElement as HTMLCanvasElement | undefined
         if (!canvas) { animId = requestAnimationFrame(updatePositions); return }
 
-        const newPositions = new Map<string, { x: number; y: number }>()
+        const newPositions = new Map<string, ScreenPos>()
+        const axisDirs: [Axis, number[]][] = [['x', [1,0,0]], ['y', [0,1,0]], ['z', [0,0,1]]]
 
         for (const ann of annotations) {
           const pos = new THREE_MOD.Vector3(ann.position.x, ann.position.y, ann.position.z)
@@ -154,9 +178,24 @@ export function SplatViewer({ modelUrl, placeId, onClose }: SplatViewerProps) {
 
           if (pos.z > 1) continue
 
-          const x = (pos.x * 0.5 + 0.5) * canvas.clientWidth
-          const y = (-pos.y * 0.5 + 0.5) * canvas.clientHeight
-          newPositions.set(ann.id, { x, y })
+          const sx = (pos.x * 0.5 + 0.5) * canvas.clientWidth
+          const sy = (-pos.y * 0.5 + 0.5) * canvas.clientHeight
+
+          const axisEnds = {} as Record<Axis, { x: number; y: number }>
+          for (const [axis, dir] of axisDirs) {
+            const end = new THREE_MOD.Vector3(
+              ann.position.x + dir[0] * GIZMO_SCALE,
+              ann.position.y + dir[1] * GIZMO_SCALE,
+              ann.position.z + dir[2] * GIZMO_SCALE,
+            )
+            end.project(camera)
+            axisEnds[axis] = {
+              x: (end.x * 0.5 + 0.5) * canvas.clientWidth,
+              y: (-end.y * 0.5 + 0.5) * canvas.clientHeight,
+            }
+          }
+
+          newPositions.set(ann.id, { x: sx, y: sy, axisEnds })
         }
 
         setScreenPositions(newPositions)
@@ -202,35 +241,58 @@ export function SplatViewer({ modelUrl, placeId, onClose }: SplatViewerProps) {
       if (pos) {
         setPendingPosition(pos)
         setNoteText('')
-        setSelectedLabel('other')
+        setSelectedLabel('ramp')
       }
     },
     [annotateMode, draggingId, getPositionFromClick]
   )
 
-  // Drag start
-  const handleDragStart = useCallback((e: React.MouseEvent, annId: string) => {
+  // Axis gizmo drag start
+  const handleAxisDragStart = useCallback((e: React.MouseEvent<SVGCircleElement>, annId: string, axis: Axis) => {
     e.stopPropagation()
     e.preventDefault()
+    const info = screenPositions.get(annId)
+    const ann = annotations.find(a => a.id === annId)
+    if (!info || !ann) return
+
+    const dx = info.axisEnds[axis].x - info.x
+    const dy = info.axisEnds[axis].y - info.y
+    const len = Math.sqrt(dx * dx + dy * dy)
+
     setDraggingId(annId)
-    dragStartRef.current = { x: e.clientX, y: e.clientY }
-  }, [])
+    setDraggingAxis(axis)
+    dragStartRef.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      pos: { ...ann.position },
+      screenDir: len > 0 ? { x: dx / len, y: dy / len } : { x: 1, y: 0 },
+      screenLen: len,
+    }
+  }, [screenPositions, annotations])
 
-  // Drag move + drag end
+  // Axis-constrained drag move + drag end
   useEffect(() => {
-    if (!draggingId) return
+    if (!draggingId || !draggingAxis) return
 
-    const handleMouseMove = async (e: MouseEvent) => {
-      const pos = await getPositionFromClick(e.clientX, e.clientY)
-      if (pos) {
-        setAnnotations((prev) =>
-          prev.map((a) => (a.id === draggingId ? { ...a, position: pos } : a))
-        )
-      }
+    const handleMouseMove = (e: MouseEvent) => {
+      const start = dragStartRef.current
+      if (!start) return
+
+      const mouseDx = e.clientX - start.mouseX
+      const mouseDy = e.clientY - start.mouseY
+      const t = mouseDx * start.screenDir.x + mouseDy * start.screenDir.y
+      const worldDelta = start.screenLen > 0 ? (t * GIZMO_SCALE) / start.screenLen : 0
+
+      const newPos = { ...start.pos }
+      newPos[draggingAxis] += worldDelta
+
+      setAnnotations(prev =>
+        prev.map(a => a.id === draggingId ? { ...a, position: newPos } : a)
+      )
     }
 
     const handleMouseUp = async () => {
-      const ann = annotations.find((a) => a.id === draggingId)
+      const ann = annotations.find(a => a.id === draggingId)
       if (ann) {
         await fetch('/api/annotations', {
           method: 'PATCH',
@@ -238,8 +300,8 @@ export function SplatViewer({ modelUrl, placeId, onClose }: SplatViewerProps) {
           body: JSON.stringify({ id: ann.id, position: ann.position }),
         })
       }
-
       setDraggingId(null)
+      setDraggingAxis(null)
       dragStartRef.current = null
     }
 
@@ -249,7 +311,7 @@ export function SplatViewer({ modelUrl, placeId, onClose }: SplatViewerProps) {
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [draggingId, annotations, getPositionFromClick])
+  }, [draggingId, draggingAxis, annotations])
 
   const saveAnnotation = useCallback(async () => {
     if (!pendingPosition || !noteText.trim()) return
@@ -276,14 +338,32 @@ export function SplatViewer({ modelUrl, placeId, onClose }: SplatViewerProps) {
     await fetch(`/api/annotations?id=${id}`, { method: 'DELETE' })
     setAnnotations((prev) => prev.filter((a) => a.id !== id))
     setSelectedAnnotation(null)
+    setEditingAnnotation(false)
   }, [])
 
-  // Escape key handler
+  const saveAnnotationEdit = useCallback(async () => {
+    if (!selectedAnnotation || !editNote.trim()) return
+    await fetch('/api/annotations', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: selectedAnnotation.id, note: editNote.trim(), label: editLabel }),
+    })
+    const updated = { ...selectedAnnotation, note: editNote.trim(), label: editLabel }
+    setAnnotations((prev) => prev.map((a) => (a.id === selectedAnnotation.id ? updated : a)))
+    setSelectedAnnotation(updated)
+    setEditingAnnotation(false)
+  }, [selectedAnnotation, editNote, editLabel])
+
+  // Arrow key pan + Escape — captured before OrbitControls sees them
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
+    const MOVE_SPEED = 0.15
+
+    const handleKey = async (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (pendingPosition) {
           setPendingPosition(null)
+        } else if (editingAnnotation) {
+          setEditingAnnotation(false)
         } else if (selectedAnnotation) {
           setSelectedAnnotation(null)
         } else if (annotateMode) {
@@ -291,11 +371,44 @@ export function SplatViewer({ modelUrl, placeId, onClose }: SplatViewerProps) {
         } else {
           onClose()
         }
+        return
       }
+
+      const isArrow = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)
+      if (!isArrow) return
+
+      e.preventDefault()
+      e.stopPropagation()
+
+      const t = threeRef.current
+      if (!t) return
+      const THREE_MOD = await import('three')
+      const { camera } = t
+      const viewer = viewerRef.current
+      const controls = viewer?.controls ?? viewer?.perspectiveControls
+
+      // Forward direction flattened to XZ plane so movement stays horizontal
+      const forward = new THREE_MOD.Vector3()
+      camera.getWorldDirection(forward)
+      forward.y = 0
+      forward.normalize()
+
+      const right = new THREE_MOD.Vector3()
+      right.crossVectors(forward, new THREE_MOD.Vector3(0, 1, 0)).normalize()
+
+      const delta = new THREE_MOD.Vector3()
+      if (e.key === 'ArrowUp')    delta.addScaledVector(forward, MOVE_SPEED)
+      if (e.key === 'ArrowDown')  delta.addScaledVector(forward, -MOVE_SPEED)
+      if (e.key === 'ArrowLeft')  delta.addScaledVector(right, -MOVE_SPEED)
+      if (e.key === 'ArrowRight') delta.addScaledVector(right, MOVE_SPEED)
+
+      camera.position.add(delta)
+      if (controls?.target) controls.target.add(delta)
     }
-    window.addEventListener('keydown', handleKey)
-    return () => window.removeEventListener('keydown', handleKey)
-  }, [onClose, pendingPosition, selectedAnnotation, annotateMode])
+
+    window.addEventListener('keydown', handleKey, { capture: true })
+    return () => window.removeEventListener('keydown', handleKey, { capture: true } as any)
+  }, [onClose, pendingPosition, selectedAnnotation, annotateMode, editingAnnotation])
 
   return (
     <div className="fixed inset-0 z-50 bg-black">
@@ -377,54 +490,71 @@ export function SplatViewer({ modelUrl, placeId, onClose }: SplatViewerProps) {
                 transform: 'translate(-50%, -50%)',
               }}
             >
-              <div className="flex items-center gap-0.5">
-                {annotateMode && (
-                  <div
-                    onMouseDown={(e) => handleDragStart(e, ann.id)}
-                    className={`flex h-7 w-5 cursor-grab items-center justify-center rounded-l-full border-2 border-r-0 transition-all active:cursor-grabbing ${
-                      draggingId === ann.id
-                        ? 'border-yellow-400 bg-yellow-500'
-                        : 'border-white/70 bg-[#1a73e8]/80 hover:bg-[#1a73e8]'
-                    }`}
-                    aria-label="Drag to reposition"
-                  >
-                    <GripVertical size={10} className="text-white" />
-                  </div>
-                )}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    if (!draggingId) setSelectedAnnotation(ann)
-                  }}
-                  onMouseEnter={() => setHoveredAnnotation(ann.id)}
-                  onMouseLeave={() => setHoveredAnnotation(null)}
-                  className={`flex h-7 items-center justify-center border-2 transition-all ${
-                    annotateMode ? 'w-6 rounded-r-full' : 'w-7 rounded-full'
-                  } ${
-                    draggingId === ann.id
-                      ? 'border-yellow-400 bg-yellow-500'
-                      : selectedAnnotation?.id === ann.id
-                        ? 'scale-125 border-white bg-[#1a73e8]'
-                        : 'border-white/70 bg-[#1a73e8]/80 hover:scale-110'
-                  }`}
-                  aria-label={`Annotation: ${ann.note}`}
-                >
-                  <MessageSquare size={12} className="text-white" />
-                </button>
-              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (!draggingId) setSelectedAnnotation(ann)
+                }}
+                onMouseEnter={() => setHoveredAnnotation(ann.id)}
+                onMouseLeave={() => setHoveredAnnotation(null)}
+                className={`flex h-7 w-7 items-center justify-center rounded-full border-2 transition-all ${
+                  selectedAnnotation?.id === ann.id
+                    ? 'scale-125 border-white bg-[#1a73e8]'
+                    : 'border-white/70 bg-[#1a73e8]/80 hover:scale-110'
+                }`}
+                aria-label={`Annotation: ${ann.note}`}
+              >
+                <LabelIcon label={ann.label} size={12} className="text-white" />
+              </button>
               {hoveredAnnotation === ann.id && !draggingId && selectedAnnotation?.id !== ann.id && (
                 <div className="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded-lg bg-black/80 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm">
                   {ann.note.length > 40 ? ann.note.slice(0, 40) + '...' : ann.note}
                 </div>
               )}
-              {draggingId === ann.id && (
-                <div className="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded-lg bg-yellow-500/90 px-3 py-1.5 text-xs font-bold text-black backdrop-blur-sm">
-                  Dragging — release to place
-                </div>
-              )}
             </div>
           )
         })}
+
+      {/* Axis gizmo handles */}
+      {!loading && annotateMode && (
+        <svg className="pointer-events-none absolute inset-0 z-[21]" style={{ width: '100%', height: '100%' }}>
+          {annotations.map((ann) => {
+            const info = screenPositions.get(ann.id)
+            if (!info) return null
+            return (
+              <g key={ann.id}>
+                {(['x', 'y', 'z'] as const).map((axis) => {
+                  const end = info.axisEnds[axis]
+                  const color = AXIS_COLORS[axis]
+                  const active = draggingId === ann.id && draggingAxis === axis
+                  return (
+                    <g key={axis}>
+                      <line
+                        x1={info.x} y1={info.y} x2={end.x} y2={end.y}
+                        stroke={color} strokeWidth={active ? 3 : 2} strokeOpacity={active ? 1 : 0.7}
+                      />
+                      <circle
+                        cx={end.x} cy={end.y} r={active ? 8 : 6}
+                        fill={color} stroke="white" strokeWidth={1.5}
+                        className="pointer-events-auto cursor-grab active:cursor-grabbing"
+                        onMouseDown={(e) => handleAxisDragStart(e, ann.id, axis)}
+                      />
+                      <text
+                        x={end.x} y={end.y - 10}
+                        textAnchor="middle" fill={color}
+                        fontSize={10} fontWeight="bold"
+                        className="pointer-events-none select-none"
+                      >
+                        {axis.toUpperCase()}
+                      </text>
+                    </g>
+                  )
+                })}
+              </g>
+            )
+          })}
+        </svg>
+      )}
 
       {/* Selected annotation detail panel */}
       {selectedAnnotation && (
@@ -442,29 +572,81 @@ export function SplatViewer({ modelUrl, placeId, onClose }: SplatViewerProps) {
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="mb-2 flex items-start justify-between">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#1a73e8]/30 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#7ab4ff]">
-              <Tag size={10} />
-              {selectedAnnotation.label || 'annotation'}
-            </span>
-            <button
-              onClick={() => deleteAnnotation(selectedAnnotation.id)}
-              className="rounded-full p-1 text-red-400/70 transition-colors hover:bg-red-400/20 hover:text-red-400"
-              aria-label="Delete annotation"
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
-          <p className="text-sm leading-relaxed text-white/90">{selectedAnnotation.note}</p>
-          <p className="mt-2 text-[10px] text-white/30">
-            {new Date(selectedAnnotation.createdAt).toLocaleDateString()}
-          </p>
-          <button
-            onClick={() => setSelectedAnnotation(null)}
-            className="mt-2 text-[11px] font-medium text-white/40 transition-colors hover:text-white/70"
-          >
-            Dismiss
-          </button>
+          {editingAnnotation ? (
+            <>
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                {LABEL_OPTIONS.map((label) => (
+                  <button
+                    key={label}
+                    onClick={() => setEditLabel(label)}
+                    className={`rounded-full px-2.5 py-1 text-[10px] font-semibold transition-colors ${
+                      editLabel === label ? 'bg-[#1a73e8] text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <textarea
+                value={editNote}
+                onChange={(e) => setEditNote(e.target.value)}
+                onKeyDown={(e) => e.stopPropagation()}
+                className="mb-3 h-20 w-full resize-none rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-[#1a73e8] focus:outline-none"
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <Button
+                  onClick={saveAnnotationEdit}
+                  disabled={!editNote.trim()}
+                  className="flex-1 rounded-full bg-[#1a73e8] text-xs font-semibold text-white hover:bg-[#1557b0] disabled:opacity-40"
+                >
+                  Save
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setEditingAnnotation(false)}
+                  className="rounded-full border-white/20 text-xs text-white hover:bg-white/10"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="mb-2 flex items-start justify-between">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#1a73e8]/30 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#7ab4ff]">
+                  <Tag size={10} />
+                  {selectedAnnotation.label || 'annotation'}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => { setEditNote(selectedAnnotation.note); setEditLabel(selectedAnnotation.label); setEditingAnnotation(true) }}
+                    className="rounded-full p-1 text-white/40 transition-colors hover:bg-white/10 hover:text-white/80"
+                    aria-label="Edit annotation"
+                  >
+                    <PenTool size={13} />
+                  </button>
+                  <button
+                    onClick={() => deleteAnnotation(selectedAnnotation.id)}
+                    className="rounded-full p-1 text-red-400/70 transition-colors hover:bg-red-400/20 hover:text-red-400"
+                    aria-label="Delete annotation"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+              <p className="text-sm leading-relaxed text-white/90">{selectedAnnotation.note}</p>
+              <p className="mt-2 text-[10px] text-white/30">
+                {new Date(selectedAnnotation.createdAt).toLocaleDateString()}
+              </p>
+              <button
+                onClick={() => { setSelectedAnnotation(null); setEditingAnnotation(false) }}
+                className="mt-2 text-[11px] font-medium text-white/40 transition-colors hover:text-white/70"
+              >
+                Dismiss
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -495,6 +677,7 @@ export function SplatViewer({ modelUrl, placeId, onClose }: SplatViewerProps) {
           <textarea
             value={noteText}
             onChange={(e) => setNoteText(e.target.value)}
+            onKeyDown={(e) => e.stopPropagation()}
             placeholder="Describe this feature..."
             className="mb-3 h-20 w-full resize-none rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-[#1a73e8] focus:outline-none"
             autoFocus
@@ -523,7 +706,7 @@ export function SplatViewer({ modelUrl, placeId, onClose }: SplatViewerProps) {
       {!loading && !error && !pendingPosition && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/40 px-4 py-2 text-xs font-medium text-white/50 backdrop-blur-sm">
           {annotateMode
-            ? 'Click to place \u00b7 Drag markers to reposition \u00b7 Esc to exit'
+            ? 'Click to place \u00b7 Drag axis handles to reposition \u00b7 Esc to exit'
             : 'Drag to orbit \u00b7 Scroll to zoom \u00b7 Esc to close'}
         </div>
       )}
