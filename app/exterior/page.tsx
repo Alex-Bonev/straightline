@@ -5,6 +5,15 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { Suspense } from 'react'
 import { ArrowLeft, PenTool, MessageSquare, Tag, Trash2 } from 'lucide-react'
 import { Nunito } from 'next/font/google'
+import {
+  APIProvider,
+  Map3D,
+  MapMode,
+  GestureHandling,
+  type Map3DRef,
+  type Map3DClickEvent,
+  type Map3DSteadyChangeEvent,
+} from '@vis.gl/react-google-maps'
 
 const nunito = Nunito({
   subsets: ['latin'],
@@ -50,6 +59,23 @@ function ExteriorView() {
   const address = params.get('address') ?? ''
   const placeId = params.get('placeId') ?? ''
   const scopedId = `ext_${placeId}`
+
+  const map3dRef     = useRef<Map3DRef>(null)
+  const flyInDoneRef = useRef(false)
+
+  const handleSteadyChange = useCallback((e: Map3DSteadyChangeEvent) => {
+    if (!e.detail.isSteady || flyInDoneRef.current) return
+    flyInDoneRef.current = true
+    map3dRef.current?.flyCameraTo({
+      endCamera: {
+        center: { lat, lng, altitude: 300 },
+        tilt: 65,
+        range: 500,
+        heading: 0,
+      },
+      durationMilliseconds: 2500,
+    })
+  }, [lat, lng])
 
   const [annotateMode,       setAnnotateMode]       = useState(false)
   const [annotations,        setAnnotations]        = useState<ExteriorAnnotation[]>([])
@@ -113,8 +139,43 @@ function ExteriorView() {
         </span>
       </header>
 
-      {/* ── Map area (placeholder for now) ─────────────────────────────── */}
-      <main className="relative flex-1 bg-[#e0f5f1]" />
+      {/* ── Map ───────────────────────────────────────────────────────── */}
+      <main
+        className="relative flex-1"
+        style={{ cursor: annotateMode ? 'crosshair' : 'default' }}
+      >
+        <APIProvider apiKey={MAPS_KEY}>
+          <Map3D
+            ref={map3dRef}
+            mode={MapMode.SATELLITE}
+            gestureHandling={GestureHandling.GREEDY}
+            defaultCenter={{ lat, lng, altitude: 1500 }}
+            defaultTilt={0}
+            defaultRange={2000}
+            defaultHeading={0}
+            onSteadyChange={handleSteadyChange}
+            style={{ width: '100%', height: '100%' }}
+          />
+        </APIProvider>
+
+        {/* Controls hint */}
+        {!annotateMode && (
+          <div
+            className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full px-4 py-2 text-[10px] font-semibold"
+            style={{ background: 'rgba(0,0,0,0.45)', color: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(8px)' }}
+          >
+            Drag to orbit · Scroll to zoom · Alt+Drag to tilt
+          </div>
+        )}
+        {annotateMode && (
+          <div
+            className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full px-4 py-2 text-[10px] font-semibold"
+            style={{ background: 'rgba(0,158,133,0.85)', color: 'white', backdropFilter: 'blur(8px)' }}
+          >
+            Click on the map to place an annotation · Esc to exit
+          </div>
+        )}
+      </main>
     </div>
   )
 }
