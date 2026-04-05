@@ -22,41 +22,45 @@ export async function POST(request: NextRequest) {
   }
 
   const task = `
-Search the web for detailed ADA / disability accessibility information about "${name}" located at "${address}".
+Search the web for physical accessibility information about "${name}" located at "${address}".
 
-Check Google Maps reviews, Yelp reviews, and any official website for this specific location.
+Check Google Maps reviews, Yelp reviews, the official website, and any local accessibility review sites.
 
-Look for these accessibility features:
-- Wheelchair ramps or accessible entrances
-- Elevator or lift availability
-- ADA-compliant restrooms
-- Accessible / handicap parking spaces
-- Step-free pathways
-- Automatic doors or push-button entry
-- Braille signage
-- Hearing loop or audio assistance systems
-- Any documented accessibility complaints, lawsuits, or violations
+For each of the 10 items below, determine whether it is met, not_met, unknown, or na.
+Return a JSON object with exactly 10 checklist items in the same order.
 
-Return ONLY a JSON object in this exact format — no explanation, no markdown, just raw JSON:
+Items:
+1. Accessible Route — continuous path from street/parking to entrance (curb cuts, no stairs)
+2. Accessible Entrance — step-free entry usable without assistance
+3. Door Width & Type — entry doors ≥32" wide; automatic or push-button opener
+4. Ramp Availability — ramp present where level changes exist (max 1:12 slope)
+5. Accessible Parking — designated spaces with access aisle near entrance
+6. Elevator / Lift — elevator or lift available (use na if building is confirmed single-story)
+7. Accessible Restroom — grab bars, turning radius, accessible fixtures
+8. Interior Pathway Width — corridors/aisles ≥36" wide and obstacle-free
+9. Service Counter Height — lowered counter section reachable from a wheelchair (≤36")
+10. Accessible Signage — ISA symbols marking accessible routes and facilities
+
+Return ONLY this JSON (no explanation, no markdown):
 {
-  "adaPercent": 78,
-  "grade": "B+",
-  "compliance": [
-    "Wheelchair accessible main entrance",
-    "Elevator serves all floors"
-  ],
-  "limitations": [
-    "No accessible parking within 100 ft",
-    "Some corridor widths below ADA minimum"
+  "checklist": [
+    {
+      "id": 1,
+      "status": "met",
+      "sourceUrl": "https://...",
+      "sourceQuote": "verbatim excerpt from the source",
+      "naReason": null
+    }
   ]
 }
 
 Rules:
-- adaPercent: integer 0–100 estimating overall ADA compliance
-- grade: one of A+, A, A-, B+, B, B-, C+, C, C-, D, F
-- compliance: 2–5 short strings of confirmed accessible features
-- limitations: 1–4 short strings of specific gaps or issues
-- If information is scarce, make a reasonable estimate based on type of venue and neighborhood
+- status must be exactly one of: "met", "not_met", "unknown", "na"
+- sourceUrl and sourceQuote must be present (non-null) when status is "met" or "not_met"
+- sourceUrl and sourceQuote must be null when status is "unknown" or "na"
+- naReason must be a short explanation when status is "na"; null otherwise
+- sourceQuote must be a verbatim excerpt — never paraphrase or invent text
+- Return exactly 10 items in order (id 1 through 10)
 `
 
   try {
@@ -155,18 +159,14 @@ export async function GET(request: NextRequest) {
     .trim()
   const rawOutput = stripped
 
-  // Try to parse JSON directly from the output first (greedy match to handle nested objects)
+  // Try to parse JSON directly from the output first
   const directMatch = rawOutput.match(/\{[\s\S]*\}/)
   if (directMatch) {
     try {
       const parsed = JSON.parse(directMatch[0])
-      if (
-        typeof parsed.adaPercent === 'number' &&
-        Array.isArray(parsed.compliance) &&
-        Array.isArray(parsed.limitations) &&
-        typeof parsed.grade === 'string'
-      ) {
-        return Response.json({ status: 'done', insights: parsed })
+      if (Array.isArray(parsed.checklist) && parsed.checklist.length === 10) {
+        const metCount = parsed.checklist.filter((i: { status: string }) => i.status === 'met').length
+        return Response.json({ status: 'done', insights: { checklist: parsed.checklist, metCount } })
       }
     } catch {
       // fall through to Claude parsing
@@ -177,29 +177,46 @@ export async function GET(request: NextRequest) {
   try {
     const msg = await claude.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 512,
+      max_tokens: 1024,
       messages: [
         {
           role: 'user',
-          content: `Extract ADA accessibility insights from the text below and return ONLY valid JSON.
+          content: `Extract ADA accessibility checklist data from the text below and return ONLY valid JSON.
 
 Text:
 ${rawOutput}
 
 Return this exact JSON (no extra text, no markdown):
 {
-  "adaPercent": 78,
-  "grade": "B+",
-  "compliance": ["Feature 1", "Feature 2"],
-  "limitations": ["Issue 1", "Issue 2"]
+  "checklist": [
+    {
+      "id": 1,
+      "status": "met",
+      "sourceUrl": "https://... or null",
+      "sourceQuote": "verbatim excerpt or null",
+      "naReason": null
+    }
+  ]
 }
 
 Rules:
-- adaPercent: integer 0–100
-- grade: A+, A, A-, B+, B, B-, C+, C, C-, D, or F
-- compliance: 2–5 confirmed accessible feature strings
-- limitations: 1–4 accessibility gap strings
-Return ONLY the JSON.`,
+- Include exactly 10 items (id 1–10) in order
+- status: "met", "not_met", "unknown", or "na"
+- sourceUrl/sourceQuote: non-null only when status is "met" or "not_met"
+- naReason: non-null only when status is "na"
+- Never invent sourceUrl or sourceQuote — use null if not found in the text
+
+Items in order:
+1. Accessible Route
+2. Accessible Entrance
+3. Door Width & Type
+4. Ramp Availability
+5. Accessible Parking
+6. Elevator / Lift
+7. Accessible Restroom
+8. Interior Pathway Width
+9. Service Counter Height
+10. Accessible Signage`,
         },
       ],
     })
@@ -209,7 +226,9 @@ Return ONLY the JSON.`,
     if (!match) return Response.json({ status: 'error' })
 
     const insights = JSON.parse(match[0])
-    return Response.json({ status: 'done', insights })
+    if (!Array.isArray(insights.checklist)) return Response.json({ status: 'error' })
+    const metCount = insights.checklist.filter((i: { status: string }) => i.status === 'met').length
+    return Response.json({ status: 'done', insights: { checklist: insights.checklist, metCount } })
   } catch (e) {
     console.error('[browseruse] Claude parse failed:', e)
     return Response.json({ status: 'error' })
