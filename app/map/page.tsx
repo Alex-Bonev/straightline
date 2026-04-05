@@ -157,7 +157,7 @@ const PINNED_QUERIES = [
   'CSE Building Computer Science Engineering UCSD',
   'Geisel Library UCSD',
   'Warren Lecture Hall UCSD',
-  'Price Center UCSD',
+  'Sanford Consortium UCSD',
 ]
 
 export default function MapPage() {
@@ -431,7 +431,7 @@ export default function MapPage() {
     ? [...pinnedPlaces, ...places.filter(p => !pinnedPlaces.some(pp => pp.placeId === p.placeId))]
     : places
 
-  const mapPlaces: MapPlace[] = allPlaces.map((p) => ({ placeId: p.placeId, name: p.name, location: p.location }))
+  const mapPlaces: MapPlace[] = allPlaces.slice(0, 5).map((p) => ({ placeId: p.placeId, name: p.name, location: p.location }))
   const selectedPlace = allPlaces.find(p => p.placeId === selectedId) ?? null
 
   // When no query: pinned 5 always first, then nearby with normal pagination

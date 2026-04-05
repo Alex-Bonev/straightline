@@ -610,7 +610,7 @@ export function PlacePanel({
                       onMouseLeave={() => setAdaTooltipVisible(false)}
                       onFocus={() => setAdaTooltipVisible(true)}
                       onBlur={() => setAdaTooltipVisible(false)}
-                      style={{ width: 14, height: 14, borderRadius: '50%', background: '#e0f5f1', color: '#007a67', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'help', flexShrink: 0 }}
+                      style={{ width: 14, height: 14, borderRadius: '50%', background: '#e0f5f1', color: '#007a67', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'help', flexShrink: 0, border: '1px solid #009E85' }}
                     >
                       i
                     </span>
