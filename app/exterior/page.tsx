@@ -112,6 +112,24 @@ function ExteriorView() {
       .catch(() => {})
   }, [scopedId])
 
+  // ── Escape key handler ──────────────────────────────────────────────────────
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (pendingPosition) {
+        setPendingPosition(null)
+      } else if (editingAnnotation) {
+        setEditingAnnotation(false)
+      } else if (selectedAnnotation) {
+        setSelectedAnnotation(null)
+      } else if (annotateMode) {
+        setAnnotateMode(false)
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [pendingPosition, editingAnnotation, selectedAnnotation, annotateMode])
+
   // ── Annotation callbacks ─────────────────────────────────────────────────────
   const saveAnnotation = useCallback(async () => {
     if (!pendingPosition || !noteText.trim()) return
