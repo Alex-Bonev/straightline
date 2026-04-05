@@ -10,6 +10,8 @@ import {
   Map3D,
   MapMode,
   GestureHandling,
+  Marker3D,
+  AltitudeMode,
   type Map3DRef,
   type Map3DClickEvent,
   type Map3DSteadyChangeEvent,
@@ -63,6 +65,16 @@ function ExteriorView() {
   const map3dRef     = useRef<Map3DRef>(null)
   const flyInDoneRef = useRef(false)
 
+  const [annotateMode,       setAnnotateMode]       = useState(false)
+  const [annotations,        setAnnotations]        = useState<ExteriorAnnotation[]>([])
+  const [pendingPosition,    setPendingPosition]    = useState<ExteriorPosition | null>(null)
+  const [noteText,           setNoteText]           = useState('')
+  const [selectedLabel,      setSelectedLabel]      = useState<typeof LABEL_OPTIONS[number]>('accessible_entrance')
+  const [selectedAnnotation, setSelectedAnnotation] = useState<ExteriorAnnotation | null>(null)
+  const [editingAnnotation,  setEditingAnnotation]  = useState(false)
+  const [editNote,           setEditNote]           = useState('')
+  const [editLabel,          setEditLabel]          = useState<typeof LABEL_OPTIONS[number]>('accessible_entrance')
+
   const handleSteadyChange = useCallback((e: Map3DSteadyChangeEvent) => {
     if (!e.detail.isSteady || flyInDoneRef.current) return
     flyInDoneRef.current = true
@@ -77,15 +89,16 @@ function ExteriorView() {
     })
   }, [lat, lng])
 
-  const [annotateMode,       setAnnotateMode]       = useState(false)
-  const [annotations,        setAnnotations]        = useState<ExteriorAnnotation[]>([])
-  const [pendingPosition,    setPendingPosition]    = useState<ExteriorPosition | null>(null)
-  const [noteText,           setNoteText]           = useState('')
-  const [selectedLabel,      setSelectedLabel]      = useState<typeof LABEL_OPTIONS[number]>('accessible_entrance')
-  const [selectedAnnotation, setSelectedAnnotation] = useState<ExteriorAnnotation | null>(null)
-  const [editingAnnotation,  setEditingAnnotation]  = useState(false)
-  const [editNote,           setEditNote]           = useState('')
-  const [editLabel,          setEditLabel]          = useState<typeof LABEL_OPTIONS[number]>('accessible_entrance')
+  const handleMapClick = useCallback((e: Map3DClickEvent) => {
+    if (!annotateMode) return
+    const raw = e.detail.position
+    if (!raw) return
+    // LatLngAltitude has a toJSON() method that returns { lat, lng, altitude }
+    const { lat: pLat, lng: pLng, altitude } = (raw as google.maps.LatLngAltitude).toJSON()
+    setPendingPosition({ lat: pLat, lng: pLng, altitude: altitude ?? 0 })
+    setNoteText('')
+    setSelectedLabel('accessible_entrance')
+  }, [annotateMode])
 
   // ── Load annotations on mount ───────────────────────────────────────────────
   useEffect(() => {
@@ -205,8 +218,22 @@ function ExteriorView() {
             defaultRange={2000}
             defaultHeading={0}
             onSteadyChange={handleSteadyChange}
+            onClick={handleMapClick}
             style={{ width: '100%', height: '100%' }}
-          />
+          >
+            {annotations.map(ann => (
+              <Marker3D
+                key={ann.id}
+                position={{ lat: ann.position.lat, lng: ann.position.lng, altitude: ann.position.altitude }}
+                altitudeMode={AltitudeMode.CLAMP_TO_GROUND}
+                title={ann.note}
+                onClick={() => {
+                  setSelectedAnnotation(ann)
+                  setEditingAnnotation(false)
+                }}
+              />
+            ))}
+          </Map3D>
         </APIProvider>
 
         {/* Controls hint */}
@@ -224,6 +251,173 @@ function ExteriorView() {
             style={{ background: 'rgba(0,158,133,0.85)', color: 'white', backdropFilter: 'blur(8px)' }}
           >
             Click on the map to place an annotation · Esc to exit
+          </div>
+        )}
+
+        {annotations.length > 0 && (
+          <div
+            className="pointer-events-none absolute bottom-4 left-4 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-semibold"
+            style={{ background: 'rgba(0,0,0,0.45)', color: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(8px)' }}
+          >
+            <MessageSquare size={11} />
+            {annotations.length} annotation{annotations.length !== 1 ? 's' : ''}
+          </div>
+        )}
+
+        {/* New annotation form */}
+        {pendingPosition && (
+          <div
+            className="absolute bottom-16 left-1/2 z-20 w-96 -translate-x-1/2 rounded-2xl p-5"
+            style={{ background: 'white', boxShadow: '0 8px 32px rgba(0,158,133,0.18), 0 2px 12px rgba(0,0,0,0.1)', border: '1.5px solid #eef0f4' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <p className="mb-3 text-[13px] font-black" style={{ color: '#1a2035' }}>Add Annotation</p>
+
+            {/* Label picker */}
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {LABEL_OPTIONS.map(label => (
+                <button
+                  key={label}
+                  onClick={() => setSelectedLabel(label)}
+                  className="rounded-full px-2.5 py-1 text-[10px] font-semibold transition-colors"
+                  style={
+                    selectedLabel === label
+                      ? { backgroundColor: '#009E85', color: 'white' }
+                      : { backgroundColor: '#e0f5f1', color: '#007a67' }
+                  }
+                >
+                  {label.replace(/_/g, ' ')}
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              value={noteText}
+              onChange={e => setNoteText(e.target.value)}
+              onKeyDown={e => e.stopPropagation()}
+              placeholder="Describe this feature…"
+              className="mb-3 h-20 w-full resize-none rounded-xl border px-3 py-2 text-[13px] focus:outline-none"
+              style={{ borderColor: '#e4e8f0', color: '#1a2035' }}
+              autoFocus
+            />
+
+            <div className="flex gap-2">
+              <button
+                onClick={saveAnnotation}
+                disabled={!noteText.trim()}
+                className="flex-1 rounded-full py-2 text-[11px] font-black text-white transition-opacity disabled:opacity-40"
+                style={{ backgroundColor: '#009E85' }}
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setPendingPosition(null)}
+                className="rounded-full px-4 py-2 text-[11px] font-semibold transition-colors hover:bg-[#f0f3fa]"
+                style={{ color: '#6b7a99', border: '1.5px solid #e4e8f0' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Selected annotation detail */}
+        {selectedAnnotation && !pendingPosition && (
+          <div
+            className="absolute right-4 top-4 z-20 w-72 rounded-2xl p-4"
+            style={{ background: 'white', boxShadow: '0 8px 32px rgba(0,158,133,0.18), 0 2px 12px rgba(0,0,0,0.1)', border: '1.5px solid #eef0f4' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {editingAnnotation ? (
+              <>
+                <div className="mb-3 flex flex-wrap gap-1.5">
+                  {LABEL_OPTIONS.map(label => (
+                    <button
+                      key={label}
+                      onClick={() => setEditLabel(label)}
+                      className="rounded-full px-2.5 py-1 text-[10px] font-semibold transition-colors"
+                      style={
+                        editLabel === label
+                          ? { backgroundColor: '#009E85', color: 'white' }
+                          : { backgroundColor: '#e0f5f1', color: '#007a67' }
+                      }
+                    >
+                      {label.replace(/_/g, ' ')}
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  value={editNote}
+                  onChange={e => setEditNote(e.target.value)}
+                  onKeyDown={e => e.stopPropagation()}
+                  className="mb-3 h-20 w-full resize-none rounded-xl border px-3 py-2 text-[13px] focus:outline-none"
+                  style={{ borderColor: '#e4e8f0', color: '#1a2035' }}
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={saveAnnotationEdit}
+                    disabled={!editNote.trim()}
+                    className="flex-1 rounded-full py-2 text-[11px] font-black text-white transition-opacity disabled:opacity-40"
+                    style={{ backgroundColor: '#009E85' }}
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => setEditingAnnotation(false)}
+                    className="rounded-full px-4 py-2 text-[11px] font-semibold transition-colors hover:bg-[#f0f3fa]"
+                    style={{ color: '#6b7a99', border: '1.5px solid #e4e8f0' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wider"
+                    style={{ backgroundColor: '#e0f5f1', color: '#007a67' }}
+                  >
+                    <Tag size={9} />
+                    {selectedAnnotation.label.replace(/_/g, ' ')}
+                  </span>
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      onClick={() => {
+                        setEditNote(selectedAnnotation.note)
+                        setEditLabel(selectedAnnotation.label as typeof LABEL_OPTIONS[number])
+                        setEditingAnnotation(true)
+                      }}
+                      className="rounded-full p-1.5 transition-colors hover:bg-[#f0f3fa]"
+                      aria-label="Edit annotation"
+                    >
+                      <PenTool size={12} style={{ color: '#9aa0b8' }} />
+                    </button>
+                    <button
+                      onClick={() => deleteAnnotation(selectedAnnotation.id)}
+                      className="rounded-full p-1.5 transition-colors hover:bg-red-50"
+                      aria-label="Delete annotation"
+                    >
+                      <Trash2 size={13} style={{ color: '#d93025' }} />
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[13px] leading-relaxed" style={{ color: '#2d3a50' }}>
+                  {selectedAnnotation.note}
+                </p>
+                <p className="mt-2 text-[10px]" style={{ color: '#b0b8d0' }}>
+                  {new Date(selectedAnnotation.createdAt).toLocaleDateString()}
+                </p>
+                <button
+                  onClick={() => { setSelectedAnnotation(null); setEditingAnnotation(false) }}
+                  className="mt-2 text-[10px] font-semibold transition-colors hover:opacity-70"
+                  style={{ color: '#9aa0b8' }}
+                >
+                  Dismiss
+                </button>
+              </>
+            )}
           </div>
         )}
       </main>
