@@ -56,6 +56,19 @@ const LABEL_MAP: Record<string, string> = {
   stairs: 'hazard',
 }
 
+// Street View default horizontal FOV is ~90°, so max angular offset from center is ±45°
+const STREET_VIEW_HALF_FOV_DEG = 45
+// Approximate distance from Street View camera to building features (metres).
+// Most Street View captures are taken from the road, ~10-15m from building facades.
+const FEATURE_PROJECTION_DISTANCE_M = 12
+
+interface BrowserUseSession {
+  status: string
+  output?: string | object
+  steps?: { screenshot?: string; actions?: { url?: string }[] }[]
+  actions?: { screenshot?: string; url?: string }[]
+}
+
 // ── POST /api/annotations/auto ───────────────────────────────────────────────
 // Body: { placeId, lat, lng, name, address }
 // Checks for cached ADA checklist, starts BrowserUse Street View session.
@@ -63,7 +76,8 @@ const LABEL_MAP: Record<string, string> = {
 export async function POST(request: NextRequest) {
   const { placeId, lat, lng, name, address } = await request.json()
 
-  if (!placeId || !lat || !lng || !name || !address) {
+  if (!placeId || lat == null || lng == null || !name || !address ||
+      typeof lat !== 'number' || typeof lng !== 'number' || Number.isNaN(lat) || Number.isNaN(lng)) {
     return Response.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
@@ -72,11 +86,16 @@ export async function POST(request: NextRequest) {
   }
 
   // Check for cached ADA checklist
-  const { data: loc } = await supabase
+  const { data: loc, error: dbError } = await supabase
     .from('locations')
     .select('browser_use')
     .eq('name', name)
     .maybeSingle()
+
+  if (dbError) {
+    console.error('[auto-annotate] DB lookup failed:', dbError.message)
+    return Response.json({ error: 'Database error' }, { status: 500 })
+  }
 
   if (!loc?.browser_use?.checklist) {
     return Response.json({ error: 'no_checklist' }, { status: 400 })
@@ -157,12 +176,18 @@ export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams
   const taskId = sp.get('taskId')
   const placeId = sp.get('placeId')
-  const lat = parseFloat(sp.get('lat') ?? '0')
-  const lng = parseFloat(sp.get('lng') ?? '0')
+  const rawLat = sp.get('lat')
+  const rawLng = sp.get('lng')
   const name = sp.get('name') ?? ''
 
-  if (!taskId || !placeId) {
-    return Response.json({ error: 'Missing taskId or placeId' }, { status: 400 })
+  if (!taskId || !placeId || !rawLat || !rawLng) {
+    return Response.json({ error: 'Missing taskId, placeId, lat, or lng' }, { status: 400 })
+  }
+
+  const lat = parseFloat(rawLat)
+  const lng = parseFloat(rawLng)
+  if (Number.isNaN(lat) || Number.isNaN(lng)) {
+    return Response.json({ error: 'Invalid lat or lng' }, { status: 400 })
   }
 
   if (!process.env.BROWSER_USE_KEY) {
@@ -170,7 +195,7 @@ export async function GET(request: NextRequest) {
   }
 
   // ── Poll BrowserUse session ──────────────────────────────────────────────
-  let buData: any
+  let buData: BrowserUseSession
   try {
     const res = await fetch(`${BROWSER_USE_BASE}/sessions/${taskId}`, {
       headers: buHeaders(),
@@ -219,7 +244,10 @@ export async function GET(request: NextRequest) {
 
   console.log('[auto-annotate] Parsed headings:', headings, 'Camera:', camLat, camLng)
 
-  // ── Extract screenshots from BrowserUse steps ────────────────────────────
+  // ── Extract screenshots from BrowserUse steps and actions ─────────────────
+  // BrowserUse may store screenshots at the step level or the action level.
+  // Heading-to-screenshot pairing assumes screenshots appear in the same order
+  // as the headings in the text output.
   const screenshots: { base64: string; heading: number }[] = []
   const steps = buData.steps ?? []
   let headingIdx = 0
@@ -232,6 +260,19 @@ export async function GET(request: NextRequest) {
       headingIdx++
     }
   }
+  // Also check action-level screenshots if steps didn't have enough
+  if (screenshots.length < headings.length) {
+    const actions = buData.actions ?? []
+    for (const action of actions) {
+      if (action.screenshot && headingIdx < headings.length) {
+        screenshots.push({
+          base64: action.screenshot,
+          heading: headings[headingIdx],
+        })
+        headingIdx++
+      }
+    }
+  }
 
   if (screenshots.length === 0) {
     console.error('[auto-annotate] No screenshots found in BrowserUse output')
@@ -241,11 +282,12 @@ export async function GET(request: NextRequest) {
   console.log('[auto-annotate] Processing', screenshots.length, 'screenshots')
 
   // ── Fetch ADA checklist for context ──────────────────────────────────────
-  const { data: loc } = await supabase
+  const { data: loc, error: locError } = await supabase
     .from('locations')
     .select('browser_use')
     .eq('name', name)
     .maybeSingle()
+  if (locError) console.warn('[auto-annotate] checklist fetch failed:', locError.message)
 
   const checklist = loc?.browser_use?.checklist as { id: number; status: string }[] | undefined
   const featureHints: string[] = []
@@ -317,8 +359,8 @@ Example: [{"type":"entrance","position":0.2,"confidence":"high","description":"M
 
       const features: VisionFeature[] = JSON.parse(arrMatch[0])
       for (const f of features) {
-        const bearing = shot.heading + f.position * 45
-        const projected = projectPoint(camLat, camLng, bearing, 12)
+        const bearing = shot.heading + f.position * STREET_VIEW_HALF_FOV_DEG
+        const projected = projectPoint(camLat, camLng, bearing, FEATURE_PROJECTION_DISTANCE_M)
         allFeatures.push({
           lat: projected.lat,
           lng: projected.lng,
