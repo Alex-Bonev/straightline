@@ -267,6 +267,9 @@ export function PlacePanel({
   const [buStatus, setBuStatus]         = useState<'loading' | 'done' | 'error'>('loading')
   const buPollRef                       = useRef<ReturnType<typeof setInterval> | null>(null)
   const buPollCountRef                  = useRef(0)
+  // Tracks the active BrowserUse taskId across effect boundaries so we can
+  // cancel a running session even if the place changes before POST resolves.
+  const buActiveTaskIdRef               = useRef<string | null>(null)
 
   const [openInfoId, setOpenInfoId]               = useState<number | null>(null)
   const [adaTooltipVisible, setAdaTooltipVisible] = useState(false)
@@ -294,11 +297,19 @@ export function PlacePanel({
     setOpenInfoId(null)
     setAdaTooltipVisible(false)
 
+    // Cancel any previously running session immediately, even if the last
+    // effect's POST hadn't resolved yet (taskId would have been null in the
+    // closure but the ref always holds the latest known taskId).
+    if (buActiveTaskIdRef.current) {
+      fetch(`/api/places/browseruse?taskId=${buActiveTaskIdRef.current}`, { method: 'DELETE' })
+      buActiveTaskIdRef.current = null
+    }
+
     let taskId: string | null = null
     let cancelled = false
 
     // Delay start so React StrictMode cleanup fires before fetch begins,
-    // preventing double-invocation from hitting the 3-session concurrent limit.
+    // preventing double-invocation from hitting BrowserUse's concurrent limit.
     const startTimer = setTimeout(() => {
       if (cancelled) return
 
@@ -318,6 +329,7 @@ export function PlacePanel({
           }
           if (!data.taskId) { setBuStatus('error'); return }
           taskId = data.taskId
+          buActiveTaskIdRef.current = data.taskId
 
           buPollRef.current = setInterval(async () => {
             buPollCountRef.current += 1
@@ -332,9 +344,11 @@ export function PlacePanel({
               if (poll.status === 'done') {
                 setBuInsights(poll.insights)
                 setBuStatus('done')
+                buActiveTaskIdRef.current = null
                 clearInterval(buPollRef.current!)
               } else if (poll.status === 'error') {
                 setBuStatus('error')
+                buActiveTaskIdRef.current = null
                 clearInterval(buPollRef.current!)
               }
             } catch {
@@ -349,7 +363,12 @@ export function PlacePanel({
       cancelled = true
       clearTimeout(startTimer)
       if (buPollRef.current) clearInterval(buPollRef.current)
-      if (taskId) fetch(`/api/places/browseruse?taskId=${taskId}`, { method: 'DELETE' })
+      // taskId covers the case where the POST resolved before cleanup ran.
+      // buActiveTaskIdRef is updated by the next effect mount for place changes.
+      if (taskId) {
+        fetch(`/api/places/browseruse?taskId=${taskId}`, { method: 'DELETE' })
+        buActiveTaskIdRef.current = null
+      }
     }
   }, [place.placeId, place.name, place.address])
 
