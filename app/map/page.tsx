@@ -178,7 +178,7 @@ export default function MapPage() {
   const [query, setQuery]                     = useState('')
   const [suggestions, setSuggestions]         = useState<Suggestion[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
-  const [visibleCount, setVisibleCount]       = useState(5)
+  const [visibleCount, setVisibleCount]       = useState(0)
   const [searchError, setSearchError]         = useState<string | null>(null)
 
   const [splatJobId, setSplatJobId]           = useState<string | null>(null)
@@ -223,7 +223,7 @@ export default function MapPage() {
 
   const fetchNearby = useCallback(async (loc: { lat: number; lng: number }) => {
     setLoading(true)
-    setVisibleCount(5)
+    setVisibleCount(0)
     setSearchError(null)
     try {
       const res  = await fetch(`/api/places/nearby?lat=${loc.lat}&lng=${loc.lng}&radius=1500`)
@@ -354,7 +354,7 @@ export default function MapPage() {
       setSuggestions([])
       setShowSuggestions(false)
       setSearchError(null)
-      setVisibleCount(5)
+      setVisibleCount(0)
       // Restore nearby places; if selected place came from a search, keep it at the front
       const nearby = nearbyPlacesRef.current
       if (selectedId && !nearby.some(p => p.placeId === selectedId)) {
