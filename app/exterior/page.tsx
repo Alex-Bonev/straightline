@@ -208,8 +208,9 @@ function ExteriorView() {
 
   // Poll auto-annotate status
   useEffect(() => {
-    if (!autoTaskId || autoStatus === 'done' || autoStatus === 'error' || autoStatus === 'idle') return
+    if (!autoTaskId) return
 
+    let cancelled = false
     const interval = setInterval(async () => {
       try {
         const params = new URLSearchParams({
@@ -220,7 +221,18 @@ function ExteriorView() {
           name,
         })
         const res = await fetch(`/api/annotations/auto?${params}`)
+        if (cancelled) return
         const data = await res.json()
+        if (cancelled) return
+
+        if (!res.ok) {
+          clearInterval(interval)
+          setAutoError(data.error ?? 'Polling error')
+          setAutoStatus('error')
+          setAutoTaskId(null)
+          setTimeout(() => { setAutoError(null); setAutoStatus('idle') }, 8000)
+          return
+        }
 
         if (data.status === 'loading') {
           setAutoStatus(data.step === 'street_view' ? 'street_view' : 'analyzing')
@@ -231,7 +243,10 @@ function ExteriorView() {
           clearInterval(interval)
           const newAnns = data.annotations ?? []
           if (newAnns.length > 0) {
-            setAnnotations(prev => [...prev, ...newAnns])
+            setAnnotations(prev => {
+              const existingIds = new Set(prev.map(a => a.id))
+              return [...prev, ...newAnns.filter((a: ExteriorAnnotation) => !existingIds.has(a.id))]
+            })
             const counts: Record<string, number> = {}
             for (const a of newAnns) {
               const readable = a.label.replace(/_/g, ' ')
@@ -257,6 +272,7 @@ function ExteriorView() {
           return
         }
       } catch {
+        if (cancelled) return
         clearInterval(interval)
         setAutoError('Network error')
         setAutoStatus('error')
@@ -265,8 +281,8 @@ function ExteriorView() {
       }
     }, 6000)
 
-    return () => clearInterval(interval)
-  }, [autoTaskId, autoStatus, scopedId, lat, lng, name])
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [autoTaskId, scopedId, lat, lng, name])
 
   const startAutoAnnotate = useCallback(async () => {
     setAutoStatus('street_view')
