@@ -142,7 +142,6 @@ function LocationCard({ place, selected, onClick }: { place: Place; selected: bo
     ? `/api/places/photo?ref=${encodeURIComponent(place.photoRef)}&w=200`
     : null
 
-  return (
     <Card
       onClick={onClick}
       className={`relative flex-row gap-0 overflow-hidden rounded-2xl border p-0 shadow-sm transition-all duration-200 cursor-pointer group min-h-[76px]

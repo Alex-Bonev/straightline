@@ -181,13 +181,28 @@ export function PlacePanel({
           if (r.status === 429) throw new Error('rate_limited')
           return r.json()
         })
-        .then(data => {
+        .then(async data => {
           if (cancelled) {
             if (data.taskId) fetch(`/api/places/browseruse?taskId=${data.taskId}`, { method: 'DELETE' })
             return
           }
           if (!data.taskId) { setBuStatus('error'); return }
           taskId = data.taskId
+
+          // Immediate first check — resolves cached results in one round trip
+          // instead of waiting for the first interval tick (was 6s).
+          const pollUrl = () => `/api/places/browseruse?taskId=${taskId}&name=${encodeURIComponent(place.name)}`
+          try {
+            const firstR    = await fetch(pollUrl())
+            const firstPoll = await firstR.json()
+            if (firstPoll.status === 'done') {
+              if (!cancelled) { setBuInsights(firstPoll.insights); setBuStatus('done') }
+              return
+            } else if (firstPoll.status === 'error') {
+              if (!cancelled) setBuStatus('error')
+              return
+            }
+          } catch { /* network hiccup — fall through to interval */ }
 
           buPollRef.current = setInterval(async () => {
             buPollCountRef.current += 1
@@ -197,7 +212,7 @@ export function PlacePanel({
               return
             }
             try {
-              const r    = await fetch(`/api/places/browseruse?taskId=${taskId}`)
+              const r    = await fetch(pollUrl())
               const poll = await r.json()
               if (poll.status === 'done') {
                 setBuInsights(poll.insights)
@@ -210,7 +225,7 @@ export function PlacePanel({
             } catch {
               // network hiccup — keep polling
             }
-          }, 6000)
+          }, 3000)
         })
         .catch(() => { if (!cancelled) setBuStatus('error') })
     }, 50)

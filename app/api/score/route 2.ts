@@ -47,7 +47,7 @@ Include only tags that are explicitly mentioned or strongly implied. Return 0-4 
 
   try {
     const message = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 256,
       messages: [{ role: 'user', content: prompt }],
     })
