@@ -139,6 +139,7 @@
 }
 
 /* ── Homepage layout helpers (desktop defaults — no inline style conflict) ─── */
+.home-root     { height: 100vh; overflow: hidden; }
 .home-left-col { width: 43%; padding: 0 44px 0 72px; justify-content: center; }
 .home-title    { font-size: clamp(4.8rem, 8.2vw, 9.2rem); }
 .home-stat-row { position: absolute; bottom: 28px; left: 72px; }
@@ -151,7 +152,7 @@
 @media (max-width: 767px) {
 
   /* Homepage */
-  .home-root      { overflow-y: auto; }
+  .home-root      { height: auto; min-height: 100vh; overflow: visible; overflow-y: auto; }
   .home-right-col { display: none; }
   .home-left-col  { width: 100%; padding: 56px 28px 48px; justify-content: flex-start; }
   .home-title     { font-size: clamp(3.4rem, 13vw, 5rem); }

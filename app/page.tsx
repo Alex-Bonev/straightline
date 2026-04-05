@@ -123,7 +123,7 @@ export default function Home() {
     <main
       aria-label="Straightline — Spatial Accessibility"
       className="home-root"
-      style={{ display: "flex", height: "100vh", overflow: "hidden", background: T.bg, position: "relative" }}
+      style={{ display: "flex", background: T.bg, position: "relative" }}
     >
       {/* ── Grain ── */}
       <svg style={{ position: "absolute", width: 0, height: 0 }} aria-hidden="true">
