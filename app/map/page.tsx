@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
 import { animate, createScope } from 'animejs'
 import { Nunito } from 'next/font/google'
@@ -162,6 +163,7 @@ const PINNED_QUERIES = [
 ]
 
 export default function MapPage() {
+  const router        = useRouter()
   const sidebarRef    = useRef<HTMLDivElement>(null)
   const scopeRef      = useRef<{ revert: () => void } | null>(null)
   const mapHandleRef    = useRef<GoogleMapHandle>(null)
@@ -356,6 +358,17 @@ export default function MapPage() {
     setShowSplatViewer(true)
   }, [])
 
+  const handleViewExterior = useCallback((place: Place) => {
+    const params = new URLSearchParams({
+      lat: String(place.location.lat),
+      lng: String(place.location.lng),
+      name: place.name,
+      address: place.address,
+      placeId: place.placeId,
+    })
+    router.push(`/exterior?${params.toString()}`)
+  }, [router])
+
   const handleQueryChange = (value: string) => {
     setQuery(value)
     if (searchTimeout.current) clearTimeout(searchTimeout.current)
@@ -471,6 +484,7 @@ export default function MapPage() {
             place={selectedPlace}
             onClose={() => setSelectedId(null)}
             onView3D={() => handleView3D(selectedPlace)}
+            onViewExterior={() => handleViewExterior(selectedPlace)}
           />
         )}
       </main>
