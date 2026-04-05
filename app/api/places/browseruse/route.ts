@@ -194,8 +194,28 @@ export async function GET(request: NextRequest) {
   const data = await res.json()
   console.log('[browseruse] poll status:', data.status, '| name:', name)
 
+  // Log visited URLs from the browser steps so we can see what's being searched
+  if (Array.isArray(data.steps)) {
+    const urls = data.steps
+      .flatMap((s: { actions?: { url?: string }[] }) => s.actions ?? [])
+      .map((a: { url?: string }) => a.url)
+      .filter(Boolean)
+    if (urls.length > 0) console.log('[browseruse] visited urls:', urls)
+  }
+  if (Array.isArray(data.actions)) {
+    const urls = (data.actions as { url?: string }[]).map(a => a.url).filter(Boolean)
+    if (urls.length > 0) console.log('[browseruse] action urls:', urls)
+  }
+
   const running = data.status === 'created' || data.status === 'running'
-  if (running) return Response.json({ status: 'loading' })
+  if (running) {
+    // On first running poll, dump top-level keys so we know what fields exist
+    if (data.status === 'running') {
+      const keys = Object.keys(data).filter(k => k !== 'output')
+      console.log('[browseruse] response shape:', keys)
+    }
+    return Response.json({ status: 'loading' })
+  }
 
   const terminal = ['idle', 'stopped', 'timed_out', 'error']
   if (!terminal.includes(data.status)) return Response.json({ status: 'loading' })
