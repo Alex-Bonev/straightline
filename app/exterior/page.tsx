@@ -94,7 +94,10 @@ function ExteriorView() {
     const raw = e.detail.position
     if (!raw) return
     // LatLngAltitude has a toJSON() method that returns { lat, lng, altitude }
-    const { lat: pLat, lng: pLng, altitude } = (raw as google.maps.LatLngAltitude).toJSON()
+    const posLiteral = ('toJSON' in raw && typeof (raw as google.maps.LatLngAltitude).toJSON === 'function')
+      ? (raw as google.maps.LatLngAltitude).toJSON()
+      : { lat: raw.lat as number, lng: raw.lng as number, altitude: raw.altitude ?? 0 }
+    const { lat: pLat, lng: pLng, altitude } = posLiteral
     setPendingPosition({ lat: pLat, lng: pLng, altitude: altitude ?? 0 })
     setNoteText('')
     setSelectedLabel('accessible_entrance')
@@ -122,6 +125,7 @@ function ExteriorView() {
         label: selectedLabel,
       }),
     })
+    // Server error — leave form open so user can retry; TODO: surface error state in future
     if (!res.ok) return
     const data = await res.json()
     if (data.annotation) setAnnotations(prev => [...prev, data.annotation])
