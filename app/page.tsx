@@ -141,7 +141,7 @@ export default function Home() {
       <section
         aria-label="Hero content"
         className="home-left-col"
-        style={{ width: "43%", flexShrink: 0, display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 44px 0 72px", position: "relative", zIndex: 10 }}
+        style={{ flexShrink: 0, display: "flex", flexDirection: "column", position: "relative", zIndex: 10 }}
       >
         {/* Eyebrow */}
         <motion.p
@@ -156,7 +156,7 @@ export default function Home() {
           initial={{ opacity: 0, y: 28 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1.1, delay: 0.25, ease: [0.16, 1, 0.3, 1] }}
           className="home-title"
-          style={{ fontFamily: "var(--font-cormorant)", fontWeight: 300, fontSize: "clamp(4.8rem, 8.2vw, 9.2rem)", lineHeight: 0.87, letterSpacing: "-0.02em", color: T.titleBase, marginBottom: "2.25rem" }}
+          style={{ fontFamily: "var(--font-cormorant)", fontWeight: 300, lineHeight: 0.87, letterSpacing: "-0.02em", color: T.titleBase, marginBottom: "2.25rem" }}
         >
           Straight
           <br />
@@ -226,7 +226,7 @@ export default function Home() {
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1, delay: 1.1 }}
           aria-hidden="true"
           className="home-stat-row"
-          style={{ position: "absolute", bottom: 28, left: 72, display: "flex", gap: "1.8rem" }}
+          style={{ display: "flex", gap: "1.8rem" }}
         >
           {[
             { val: "3D",    label: "Point Clouds"  },

@@ -138,27 +138,27 @@
   50%       { opacity: 0.45; transform: scale(0.7); }
 }
 
-/* ── Mobile responsive ─────────────────────────────────────────────────────── */
+/* ── Homepage layout helpers (desktop defaults — no inline style conflict) ─── */
+.home-left-col { width: 43%; padding: 0 44px 0 72px; justify-content: center; }
+.home-title    { font-size: clamp(4.8rem, 8.2vw, 9.2rem); }
+.home-stat-row { position: absolute; bottom: 28px; left: 72px; }
+
+/* Map sidebar: mobile height defined here so flex-1 scroll works correctly */
+.map-sidebar { height: 65vh; }
+@media (min-width: 768px) { .map-sidebar { height: auto; } }
+
+/* ── Mobile overrides ──────────────────────────────────────────────────────── */
 @media (max-width: 767px) {
 
   /* Homepage */
-  .home-root     { overflow-y: auto !important; }
-  .home-right-col { display: none !important; }
-  .home-left-col {
-    width: 100% !important;
-    padding: 56px 28px 48px !important;
-    justify-content: flex-start !important;
-  }
-  .home-title { font-size: clamp(3.4rem, 13vw, 5rem) !important; }
-  .home-stat-row {
-    position: relative !important;
-    left: auto !important;
-    bottom: auto !important;
-    padding-left: 0 !important;
-    margin-top: 2.5rem;
-  }
+  .home-root      { overflow-y: auto; }
+  .home-right-col { display: none; }
+  .home-left-col  { width: 100%; padding: 56px 28px 48px; justify-content: flex-start; }
+  .home-title     { font-size: clamp(3.4rem, 13vw, 5rem); }
+  .home-stat-row  { position: relative; bottom: auto; left: auto; margin-top: 2.5rem; }
 
   /* Map — PlacePanel as full-width bottom sheet */
+  /* !important needed only here because left/right/bottom are still inline styles */
   .place-panel-wrapper {
     left: 0 !important;
     right: 0 !important;
@@ -167,7 +167,7 @@
     overflow-y: auto;
   }
 
-  /* Map sidebar — drag handle */
+  /* Map sidebar — visual drag handle */
   .map-sidebar::before {
     content: '';
     display: block;

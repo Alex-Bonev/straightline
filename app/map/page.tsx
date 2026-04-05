@@ -492,7 +492,7 @@ export default function MapPage() {
       {/* Floating sidebar */}
       <aside
         ref={sidebarRef}
-        className="map-sidebar absolute bottom-0 left-0 right-0 z-20 flex max-h-[65vh] w-full flex-shrink-0 flex-col overflow-hidden rounded-t-2xl bg-white md:bottom-4 md:left-4 md:right-auto md:top-4 md:max-h-none md:w-[480px] md:rounded-2xl"
+        className="map-sidebar absolute bottom-0 left-0 right-0 z-20 flex w-full flex-shrink-0 flex-col overflow-hidden rounded-t-2xl bg-white md:bottom-4 md:left-4 md:right-auto md:top-4 md:w-[480px] md:rounded-2xl"
         style={{ boxShadow: '0 8px 40px rgba(26,58,180,0.13), 0 2px 12px rgba(0,0,0,0.07)' }}
       >
         {/* Header */}
