@@ -192,8 +192,8 @@ Return this exact JSON (no extra text, no markdown):
     {
       "id": 1,
       "status": "met",
-      "sourceUrl": "https://... or null",
-      "sourceQuote": "verbatim excerpt or null",
+      "sourceUrl": null,
+      "sourceQuote": null,
       "naReason": null
     }
   ]
@@ -226,7 +226,7 @@ Items in order:
     if (!match) return Response.json({ status: 'error' })
 
     const insights = JSON.parse(match[0])
-    if (!Array.isArray(insights.checklist)) return Response.json({ status: 'error' })
+    if (!Array.isArray(insights.checklist) || insights.checklist.length !== 10) return Response.json({ status: 'error' })
     const metCount = insights.checklist.filter((i: { status: string }) => i.status === 'met').length
     return Response.json({ status: 'done', insights: { checklist: insights.checklist, metCount } })
   } catch (e) {
