@@ -25,6 +25,7 @@ import { GoogleMapView, type GoogleMapHandle, type MapPlace } from '@/components
 import { PlacePanel } from '@/components/map/place-panel'
 import { SplatViewer } from '@/components/splat/splat-viewer'
 import { SplatJobPanel } from '@/components/splat/splat-job-panel'
+import { supabase } from '@/lib/supabase'
 
 const nunito = Nunito({
   subsets: ['latin'],
@@ -339,9 +340,17 @@ export default function MapPage() {
     mapHandleRef.current?.focusPlace(place.location, true)
   }, [selectedId])
 
-  const handleView3D = useCallback(async (_place: Place) => {
-    // Use hardcoded demo model for now
-    setSplatModelUrl('/model.spz')
+  const handleView3D = useCallback(async (place: Place) => {
+    const { data } = await supabase
+      .from('locations')
+      .select('map_3d')
+      .eq('name', place.name)
+      .single()
+
+    const modelUrl: string | null = data?.map_3d?.url ?? null
+    if (!modelUrl) return
+
+    setSplatModelUrl(modelUrl)
     setShowSplatPanel(false)
     setSplatJobId(null)
     setShowSplatViewer(true)
