@@ -151,6 +151,15 @@ function LocationCard({ place, selected, onClick, onView3D }: { place: Place; se
 
 const MAPS_KEY = process.env.NEXT_PUBLIC_MAPS_KEY ?? ''
 
+// Hardcoded featured UCSD locations — always shown at the top when no query is active
+const PINNED_QUERIES = [
+  'Franklin Antonio Hall UCSD',
+  'CSE Building Computer Science Engineering UCSD',
+  'Geisel Library UCSD',
+  'Warren Lecture Hall UCSD',
+  'Price Center UCSD',
+]
+
 export default function MapPage() {
   const sidebarRef    = useRef<HTMLDivElement>(null)
   const scopeRef      = useRef<{ revert: () => void } | null>(null)
@@ -161,6 +170,7 @@ export default function MapPage() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [mapCenter, setMapCenter]       = useState<{ lat: number; lng: number }>({ lat: 32.8801, lng: -117.2340 })
   const [places, setPlaces]             = useState<Place[]>([])
+  const [pinnedPlaces, setPinnedPlaces] = useState<Place[]>([])
   const [selectedId, setSelectedId]     = useState<string | null>(null)
   const [loading, setLoading]           = useState(true)
   const [mapLoaded, setMapLoaded]       = useState(false)
@@ -183,6 +193,32 @@ export default function MapPage() {
       animate('.nearby-header',   { translateX: [-22, 0], opacity: [0, 1], duration: 550, delay: 180, ease: 'outExpo' })
     })
     return () => scopeRef.current?.revert()
+  }, [])
+
+  // Resolve the 5 pinned UCSD locations on mount
+  useEffect(() => {
+    const UCSD = { lat: 32.8801, lng: -117.2340 }
+    Promise.all(
+      PINNED_QUERIES.map(q =>
+        fetch(`/api/places/autocomplete?query=${encodeURIComponent(q)}&lat=${UCSD.lat}&lng=${UCSD.lng}`)
+          .then(r => r.json())
+          .then(async d => {
+            const top = d.suggestions?.[0]
+            if (!top) return null
+            const det = await fetch(`/api/places/details?placeId=${top.placeId}`).then(r => r.json())
+            const p = det.detail
+            if (!p) return null
+            return {
+              placeId: p.placeId, name: p.name, address: p.address, location: p.location,
+              rating: p.rating, userRatingsTotal: p.userRatingsTotal, types: p.types,
+              openNow: p.openNow, photoRef: p.photoRef ?? null,
+            } as Place
+          })
+          .catch(() => null)
+      )
+    ).then(results => {
+      setPinnedPlaces(results.filter((p): p is Place => p !== null))
+    })
   }, [])
 
   const fetchNearby = useCallback(async (loc: { lat: number; lng: number }) => {
@@ -355,11 +391,21 @@ export default function MapPage() {
     if (userLocation) { setMapCenter({ ...userLocation }); mapHandleRef.current?.focusPlace(userLocation) }
   }
 
-  const mapPlaces: MapPlace[] = places.map((p) => ({ placeId: p.placeId, name: p.name, location: p.location }))
-  const selectedPlace           = places.find(p => p.placeId === selectedId) ?? null
+  // All places for the map markers (pinned + search/nearby)
+  const allPlaces: Place[] = !query
+    ? [...pinnedPlaces, ...places.filter(p => !pinnedPlaces.some(pp => pp.placeId === p.placeId))]
+    : places
 
-  // Show selected card first, then rest in original order
+  const mapPlaces: MapPlace[] = allPlaces.map((p) => ({ placeId: p.placeId, name: p.name, location: p.location }))
+  const selectedPlace = allPlaces.find(p => p.placeId === selectedId) ?? null
+
+  // When no query: pinned 5 always first, then nearby with normal pagination
+  // When query active: normal search results with reorder-selected-first
   const displayedPlaces = (() => {
+    if (!query) {
+      const nearbyVisible = places.slice(0, visibleCount)
+      return [...pinnedPlaces, ...nearbyVisible.filter(p => !pinnedPlaces.some(pp => pp.placeId === p.placeId))]
+    }
     const visible = places.slice(0, visibleCount)
     if (!selectedId) return visible
     const selIdx = visible.findIndex(p => p.placeId === selectedId)
@@ -382,7 +428,7 @@ export default function MapPage() {
           places={mapPlaces}
           selectedPlaceId={selectedId}
           userLocation={userLocation}
-          onMarkerClick={(placeId) => { const place = places.find((p) => p.placeId === placeId); if (place) selectPlace(place) }}
+          onMarkerClick={(placeId) => { const place = allPlaces.find((p) => p.placeId === placeId); if (place) selectPlace(place) }}
           onReady={() => setMapLoaded(true)}
         />
 
@@ -508,7 +554,7 @@ export default function MapPage() {
               </h2>
             </div>
             <Badge className="h-auto rounded-full border-none px-2.5 py-1 text-[10px] font-bold" style={{ backgroundColor: '#e0f5f1', color: '#007a67' }}>
-              {places.length} found
+              {query ? places.length : pinnedPlaces.length + places.length} found
             </Badge>
           </div>
 
