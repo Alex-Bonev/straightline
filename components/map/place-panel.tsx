@@ -253,9 +253,11 @@ function PlaceTitle({ text }: { text: string }) {
 export function PlacePanel({
   place,
   onClose,
+  onView3D,
 }: {
   place: Place
   onClose: () => void
+  onView3D?: () => void
 }) {
   const wrapperRef                = useRef<HTMLDivElement>(null)
   const [photoUrls, setPhotoUrls] = useState<string[]>([])

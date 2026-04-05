@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { NextRequest } from 'next/server'
+import { supabase } from '@/lib/supabase'
 
 const BROWSER_USE_BASE = 'https://api.browser-use.com/api/v3'
 const claude = new Anthropic({ apiKey: process.env.CLAUDE_KEY })
@@ -13,7 +14,8 @@ function buHeaders() {
 
 // ── POST /api/places/browseruse ───────────────────────────────────────────────
 // Body: { name: string, address: string }
-// Starts a BrowserUse cloud session. Returns { taskId }.
+// 1. Checks locations table — if checklist data exists, returns sentinel taskId.
+// 2. Otherwise starts a live BrowserUse scan and returns the real taskId.
 export async function POST(request: NextRequest) {
   const { name, address } = await request.json()
 
@@ -21,6 +23,23 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'BROWSER_USE_KEY not set' }, { status: 500 })
   }
 
+  // ── Check locations table for cached checklist data ───────────────────────
+  try {
+    const { data: loc } = await supabase
+      .from('locations')
+      .select('id, browser_use')
+      .eq('name', name)
+      .maybeSingle()
+
+    if (loc?.browser_use) {
+      console.log('[browseruse] cache hit:', name)
+      return Response.json({ taskId: `cached:${loc.id}` })
+    }
+  } catch (e) {
+    console.warn('[browseruse] cache check failed:', e)
+  }
+
+  // ── Start live scan ───────────────────────────────────────────────────────
   const task = `
 You are an ADA accessibility researcher. Search exhaustively for physical accessibility information about "${name}" located at "${address}".
 
@@ -92,7 +111,7 @@ Rules:
     }
 
     const data = await res.json()
-    console.log('[browseruse] session started:', data.id)
+    console.log('[browseruse] session started:', data.id, 'for:', name)
     return Response.json({ taskId: data.id })
   } catch (e) {
     console.error('[browseruse] POST fetch error:', e)
@@ -105,7 +124,7 @@ Rules:
 export async function DELETE(request: NextRequest) {
   const taskId = request.nextUrl.searchParams.get('taskId')
   if (!taskId) return Response.json({ error: 'taskId required' }, { status: 400 })
-
+  if (taskId.startsWith('cached:')) return Response.json({ ok: true })
   if (!process.env.BROWSER_USE_KEY) return Response.json({ ok: false }, { status: 500 })
 
   try {
@@ -119,20 +138,36 @@ export async function DELETE(request: NextRequest) {
   return Response.json({ ok: true })
 }
 
-// ── GET /api/places/browseruse?taskId=xxx ────────────────────────────────────
+// ── GET /api/places/browseruse?taskId=xxx&name=xxx ───────────────────────────
 // Terminal statuses: idle | stopped | timed_out | error
 // Returns:
 //   { status: 'loading' }
 //   { status: 'done', insights: BrowserUseInsights }
 //   { status: 'error' }
+// When status is 'done' and name is provided, writes checklist to locations table.
 export async function GET(request: NextRequest) {
   const taskId = request.nextUrl.searchParams.get('taskId')
+  const name   = request.nextUrl.searchParams.get('name') ?? ''
   if (!taskId) return Response.json({ error: 'taskId required' }, { status: 400 })
+
+  // ── Serve from locations table cache ─────────────────────────────────────
+  if (taskId.startsWith('cached:')) {
+    const locationId = taskId.slice('cached:'.length)
+    const { data: loc } = await supabase
+      .from('locations')
+      .select('browser_use')
+      .eq('id', locationId)
+      .maybeSingle()
+
+    if (loc?.browser_use) return Response.json({ status: 'done', insights: loc.browser_use })
+    return Response.json({ status: 'error' })
+  }
 
   if (!process.env.BROWSER_USE_KEY) {
     return Response.json({ error: 'BROWSER_USE_KEY not set' }, { status: 500 })
   }
 
+  // ── Poll BrowserUse ───────────────────────────────────────────────────────
   let res: Response
   try {
     res = await fetch(`${BROWSER_USE_BASE}/sessions/${taskId}`, {
@@ -149,7 +184,7 @@ export async function GET(request: NextRequest) {
   }
 
   const data = await res.json()
-  console.log('[browseruse] poll status:', data.status)
+  console.log('[browseruse] poll status:', data.status, '| name:', name)
 
   const running = data.status === 'created' || data.status === 'running'
   if (running) return Response.json({ status: 'loading' })
@@ -176,7 +211,9 @@ export async function GET(request: NextRequest) {
       const parsed = JSON.parse(directMatch[0])
       if (Array.isArray(parsed.checklist) && parsed.checklist.length === 10) {
         const metCount = parsed.checklist.filter((i: { status: string }) => i.status === 'met').length
-        return Response.json({ status: 'done', insights: { checklist: parsed.checklist, metCount } })
+        const insights = { checklist: parsed.checklist, metCount }
+        void saveToSupabase(name, insights)
+        return Response.json({ status: 'done', insights })
       }
     } catch {
       // fall through to Claude parsing
@@ -237,12 +274,46 @@ Items in order:
     const match = text.match(/\{[\s\S]*\}/)
     if (!match) return Response.json({ status: 'error' })
 
-    const insights = JSON.parse(match[0])
-    if (!Array.isArray(insights.checklist) || insights.checklist.length !== 10) return Response.json({ status: 'error' })
-    const metCount = insights.checklist.filter((i: { status: string }) => i.status === 'met').length
-    return Response.json({ status: 'done', insights: { checklist: insights.checklist, metCount } })
+    const parsed = JSON.parse(match[0])
+    if (!Array.isArray(parsed.checklist) || parsed.checklist.length !== 10) return Response.json({ status: 'error' })
+    const metCount = parsed.checklist.filter((i: { status: string }) => i.status === 'met').length
+    const insights = { checklist: parsed.checklist, metCount }
+    void saveToSupabase(name, insights)
+    return Response.json({ status: 'done', insights })
   } catch (e) {
     console.error('[browseruse] Claude parse failed:', e)
     return Response.json({ status: 'error' })
+  }
+}
+
+// ── Persist checklist to locations table ─────────────────────────────────────
+// Fire-and-forget; called after a scan completes successfully.
+async function saveToSupabase(name: string, insights: object) {
+  if (!name) return
+  try {
+    const { data: existing, error: findErr } = await supabase
+      .from('locations')
+      .select('id')
+      .eq('name', name)
+      .maybeSingle()
+
+    if (findErr) { console.error('[browseruse] find failed:', findErr.message); return }
+
+    if (existing?.id) {
+      const { error: updateErr } = await supabase
+        .from('locations')
+        .update({ browser_use: insights })
+        .eq('id', existing.id)
+      if (updateErr) console.error('[browseruse] update failed:', updateErr.message)
+      else console.log('[browseruse] cached (update):', name)
+    } else {
+      const { error: insertErr } = await supabase
+        .from('locations')
+        .insert({ name, browser_use: insights })
+      if (insertErr) console.error('[browseruse] insert failed:', insertErr.message)
+      else console.log('[browseruse] cached (insert):', name)
+    }
+  } catch (e) {
+    console.error('[browseruse] save error:', e)
   }
 }

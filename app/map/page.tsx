@@ -19,9 +19,12 @@ import {
   Layers,
   ChevronRight,
   Locate,
+  Box,
 } from 'lucide-react'
 import { GoogleMapView, type GoogleMapHandle, type MapPlace } from '@/components/map/google-map'
 import { PlacePanel } from '@/components/map/place-panel'
+import { SplatViewer } from '@/components/splat/splat-viewer'
+import { SplatJobPanel } from '@/components/splat/splat-job-panel'
 
 const nunito = Nunito({
   subsets: ['latin'],
@@ -93,7 +96,7 @@ const SUGGESTED_PROMPTS = [
   'ADA compliant museums',
 ]
 
-function LocationCard({ place, selected, onClick }: { place: Place; selected: boolean; onClick: () => void }) {
+function LocationCard({ place, selected, onClick, onView3D }: { place: Place; selected: boolean; onClick: () => void; onView3D: (place: Place) => void }) {
   const photoUrl = place.photoRef
     ? `/api/places/photo?ref=${encodeURIComponent(place.photoRef)}&w=200`
     : null
@@ -131,6 +134,17 @@ function LocationCard({ place, selected, onClick }: { place: Place; selected: bo
           <span className="truncate">{place.address}</span>
         </p>
       </div>
+
+      {/* View in 3D button */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onView3D(place) }}
+        className="absolute bottom-2 right-2 z-10 flex h-6 items-center gap-1 rounded-full px-2 text-[9px] font-bold transition-colors hover:bg-[#1a73e8] hover:text-white"
+        style={{ backgroundColor: '#e8f0fe', color: '#1a52b4' }}
+        title="View in 3D"
+      >
+        <Box size={10} />
+        3D
+      </button>
     </Card>
   )
 }
@@ -156,6 +170,11 @@ export default function MapPage() {
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [visibleCount, setVisibleCount]       = useState(5)
   const [searchError, setSearchError]         = useState<string | null>(null)
+
+  const [splatJobId, setSplatJobId]           = useState<string | null>(null)
+  const [splatModelUrl, setSplatModelUrl]     = useState<string | null>(null)
+  const [showSplatViewer, setShowSplatViewer] = useState(false)
+  const [showSplatPanel, setShowSplatPanel]   = useState(false)
 
   useEffect(() => {
     scopeRef.current = createScope({ root: sidebarRef }).add(() => {
@@ -284,6 +303,14 @@ export default function MapPage() {
     mapHandleRef.current?.focusPlace(place.location, true)
   }, [selectedId])
 
+  const handleView3D = useCallback(async (_place: Place) => {
+    // Use hardcoded demo model for now
+    setSplatModelUrl('/model.spz')
+    setShowSplatPanel(false)
+    setSplatJobId(null)
+    setShowSplatViewer(true)
+  }, [])
+
   const handleQueryChange = (value: string) => {
     setQuery(value)
     if (searchTimeout.current) clearTimeout(searchTimeout.current)
@@ -388,6 +415,7 @@ export default function MapPage() {
             key={selectedPlace.placeId}
             place={selectedPlace}
             onClose={() => setSelectedId(null)}
+            onView3D={() => handleView3D(selectedPlace)}
           />
         )}
       </main>
@@ -502,7 +530,7 @@ export default function MapPage() {
                         exit={{ opacity: 0, x: -12, scale: 0.97 }}
                         transition={{ duration: 0.32, ease: [0.25, 0.46, 0.45, 0.94] }}
                       >
-                        <LocationCard place={place} selected={selectedId === place.placeId} onClick={() => selectPlace(place)} />
+                        <LocationCard place={place} selected={selectedId === place.placeId} onClick={() => selectPlace(place)} onView3D={handleView3D} />
                       </motion.div>
                     ))}
                   </AnimatePresence>
@@ -522,6 +550,36 @@ export default function MapPage() {
           </div>
         </div>
       </aside>
+
+      {/* Splat job progress panel */}
+      {showSplatPanel && splatJobId && (
+        <div className="absolute bottom-6 right-5 z-30 w-[340px]">
+          <SplatJobPanel
+            jobId={splatJobId}
+            onComplete={(url) => {
+              setSplatModelUrl(url)
+              setShowSplatPanel(false)
+              setShowSplatViewer(true)
+            }}
+            onCancel={() => {
+              setShowSplatPanel(false)
+              setSplatJobId(null)
+            }}
+          />
+        </div>
+      )}
+
+      {/* Full-screen splat viewer overlay */}
+      {showSplatViewer && splatModelUrl && (
+        <SplatViewer
+          modelUrl={splatModelUrl}
+          placeId={selectedId ?? ''}
+          onClose={() => {
+            setShowSplatViewer(false)
+            setSplatModelUrl(null)
+          }}
+        />
+      )}
     </div>
   )
 }
