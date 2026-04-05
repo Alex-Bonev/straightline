@@ -129,10 +129,8 @@ function MapLoadingText({ font }: { font: string }) {
 
 const SUGGESTED_PROMPTS = [
   'Accessible malls near me',
-  'Ramp-accessible libraries',
   'Wheelchair-friendly restaurants',
   'ADA compliant museums',
-  'Accessible transit stations',
 ]
 
 function LocationCard({ place, selected, onClick }: { place: Place; selected: boolean; onClick: () => void }) {
@@ -147,7 +145,7 @@ function LocationCard({ place, selected, onClick }: { place: Place; selected: bo
   return (
     <Card
       onClick={onClick}
-      className={`relative flex-row gap-0 overflow-hidden rounded-2xl border p-0 shadow-sm transition-all duration-200 cursor-pointer group h-[76px]
+      className={`relative flex-row gap-0 overflow-hidden rounded-2xl border p-0 shadow-sm transition-all duration-200 cursor-pointer group min-h-[76px]
         ${selected
           ? 'border-[#1a73e8] shadow-[0_4px_20px_rgba(26,115,232,0.22)] bg-[#f0f6ff]'
           : 'border-[#eaecf0] hover:shadow-[0_4px_16px_rgba(0,0,0,0.09)] hover:border-[#c8d0e0]'
@@ -159,16 +157,16 @@ function LocationCard({ place, selected, onClick }: { place: Place; selected: bo
         </div>
       )}
 
-      {/* Photo thumbnail — no z-10 so it doesn't leak into the sidebar stacking context */}
-      <div className="relative w-[68px] flex-shrink-0 overflow-hidden h-full">
+      {/* Photo thumbnail — self-stretch so it fills card height regardless of content */}
+      <div className="relative w-[68px] flex-shrink-0 overflow-hidden self-stretch">
         {photoUrl ? (
           <img
             src={photoUrl}
             alt={place.name}
-            className="h-full w-full object-cover"
+            className="absolute inset-0 h-full w-full object-cover"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center" style={{ backgroundColor: accentColor + '14' }}>
+          <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: accentColor + '14' }}>
             <MapPin size={18} style={{ color: accentColor }} />
           </div>
         )}
