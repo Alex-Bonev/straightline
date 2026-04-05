@@ -153,7 +153,8 @@ function ExteriorView() {
   }, [pendingPosition, noteText, selectedLabel, scopedId])
 
   const deleteAnnotation = useCallback(async (id: string) => {
-    await fetch(`/api/annotations?id=${id}`, { method: 'DELETE' })
+    const res = await fetch(`/api/annotations?id=${id}`, { method: 'DELETE' })
+    if (!res.ok) return
     setAnnotations(prev => prev.filter(a => a.id !== id))
     setSelectedAnnotation(null)
     setEditingAnnotation(false)
@@ -161,7 +162,9 @@ function ExteriorView() {
 
   const saveAnnotationEdit = useCallback(async () => {
     if (!selectedAnnotation || !editNote.trim()) return
-    // PATCH only persists position; note/label are updated client-side only (matches interior viewer)
+    // TODO: The PATCH endpoint requires `position` and ignores note/label — this call always returns 400.
+    // note/label edits are client-only until the API is extended to accept them.
+    // Matches the interior splat viewer behavior (same limitation).
     await fetch('/api/annotations', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
