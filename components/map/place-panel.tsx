@@ -380,11 +380,31 @@ export function PlacePanel({
     if (!el) return
     el.style.opacity   = '0'
     el.style.transform = 'translateY(22px)'
-    animate(el, { opacity: [0, 1], translateY: [22, 0], duration: 440, ease: 'outExpo' })
-    animate('.pp-s', { opacity: [0, 1], translateY: [10, 0], delay: stagger(65, { start: 100 }), duration: 330, ease: 'outExpo' })
-    const t = setTimeout(() => setScramble(true), 380)
+    animate(el, { opacity: [0, 1], translateY: [22, 0], duration: 700, ease: 'outExpo' })
+    animate('.pp-s', { opacity: [0, 1], translateY: [10, 0], delay: stagger(90, { start: 200 }), duration: 500, ease: 'outExpo' })
+    const t = setTimeout(() => setScramble(true), 520)
     return () => clearTimeout(t)
   }, [place.placeId])
+
+  // ── BrowserUse content animation ─────────────────────────────────────────
+  useEffect(() => {
+    if (buStatus !== 'done') return
+    requestAnimationFrame(() => {
+      animate('.bu-item', {
+        opacity: [0, 1],
+        translateY: [14, 0],
+        delay: stagger(35, { start: 0 }),
+        duration: 420,
+        ease: 'outExpo',
+      })
+      animate('.bu-score', {
+        opacity: [0, 1],
+        scale: [0.82, 1],
+        duration: 500,
+        ease: 'outExpo',
+      })
+    })
+  }, [buStatus])
 
   const fallback = 'https://images.unsplash.com/photo-1555636222-cae831e670b3?w=560&h=340&fit=crop'
   const imgs     = photoUrls.length > 0 ? photoUrls : [fallback]
@@ -536,7 +556,7 @@ export function PlacePanel({
               ) : buStatus === 'error' ? (
                 <span className="text-[11px] font-semibold" style={{ color: '#d93025' }}>Scan failed</span>
               ) : (
-                <div>
+                <div className="bu-score" style={{ opacity: 0 }}>
                   <span className="text-[28px] font-black leading-none tracking-tight" style={{ color: '#1a2035' }}>
                     {buInsights?.metCount ?? 0}
                   </span>
@@ -565,12 +585,13 @@ export function PlacePanel({
               {buStatus === 'loading'
                 ? Array.from({ length: 5 }).map((_, i) => <ChecklistSkeleton key={i} />)
                 : (buInsights?.checklist ?? []).slice(0, 5).map(item => (
-                    <ChecklistRow
-                      key={item.id}
-                      item={item}
-                      isOpen={openInfoId === item.id}
-                      onToggle={() => setOpenInfoId(openInfoId === item.id ? null : item.id)}
-                    />
+                    <div key={item.id} className="bu-item" style={{ opacity: 0 }}>
+                      <ChecklistRow
+                        item={item}
+                        isOpen={openInfoId === item.id}
+                        onToggle={() => setOpenInfoId(openInfoId === item.id ? null : item.id)}
+                      />
+                    </div>
                   ))
               }
             </div>
@@ -579,12 +600,13 @@ export function PlacePanel({
               {buStatus === 'loading'
                 ? Array.from({ length: 5 }).map((_, i) => <ChecklistSkeleton key={i} />)
                 : (buInsights?.checklist ?? []).slice(5, 10).map(item => (
-                    <ChecklistRow
-                      key={item.id}
-                      item={item}
-                      isOpen={openInfoId === item.id}
-                      onToggle={() => setOpenInfoId(openInfoId === item.id ? null : item.id)}
-                    />
+                    <div key={item.id} className="bu-item" style={{ opacity: 0 }}>
+                      <ChecklistRow
+                        item={item}
+                        isOpen={openInfoId === item.id}
+                        onToggle={() => setOpenInfoId(openInfoId === item.id ? null : item.id)}
+                      />
+                    </div>
                   ))
               }
             </div>
