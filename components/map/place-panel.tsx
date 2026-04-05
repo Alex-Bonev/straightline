@@ -135,8 +135,10 @@ function ChecklistRow({
       {/* Slide-out card */}
       <div style={{
         background: 'white',
-        border: `1.5px solid ${isOpen ? slideColor : 'transparent'}`,
         borderTop: 'none',
+        borderRight: `1.5px solid ${isOpen ? slideColor : 'transparent'}`,
+        borderBottom: `1.5px solid ${isOpen ? slideColor : 'transparent'}`,
+        borderLeft: `1.5px solid ${isOpen ? slideColor : 'transparent'}`,
         borderRadius: '0 0 8px 8px',
         maxHeight: isOpen ? 600 : 0,
         overflow: isOpen ? 'auto' : 'hidden',
