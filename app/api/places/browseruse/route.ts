@@ -54,29 +54,36 @@ Search ALL of the following — do not stop after the first source:
 - Any disability advocacy or accessibility review site (e.g. WheelMate, AccessNow, AXSMap)
 
 For each of the 10 items below, determine whether it is met, not_met, unknown, or na.
-Push hard to reach a "met" or "not_met" conclusion — use "unknown" only as a last resort when you truly found nothing. If direct evidence is scarce, use indirect signals: building type, construction era, local ADA enforcement records, similar venues in the area, street-view imagery descriptions, or logical inference from venue type (e.g. a modern hospital almost certainly has an elevator).
+
+Strictness rules — read carefully:
+- "met" requires a SPECIFIC, DIRECT statement from a source. Generic phrases like "accessible", "ADA compliant", or "wheelchair friendly" alone are NOT sufficient to mark individual items as met.
+- "not_met" requires a specific statement or photo evidence that the feature is absent or non-compliant.
+- "unknown" is the correct answer for any item where you cannot find a specific statement about that exact feature. Default to "unknown" — do not infer or guess.
+- "na" is only for items that structurally cannot apply (e.g. elevator for a confirmed single-story building).
+- Do NOT mark an item "met" just because a building is modern, large, or a chain — ADA compliance varies widely and must be verified per item.
+- Do NOT mark an item "met" based on a general "wheelchair accessible" tag. That tag on Google Maps only confirms a wheelchair-accessible entrance, not the other 9 items.
 
 Items:
-1. Accessible Route — continuous path from street/parking to entrance (curb cuts, no stairs)
-2. Accessible Entrance — step-free entry usable without assistance
-3. Door Width & Type — entry doors ≥32" wide; automatic or push-button opener
-4. Ramp Availability — ramp present where level changes exist (max 1:12 slope)
-5. Accessible Parking — designated spaces with access aisle near entrance
-6. Elevator / Lift — elevator or lift available (use na if building is confirmed single-story)
-7. Accessible Restroom — grab bars, turning radius, accessible fixtures
-8. Interior Pathway Width — corridors/aisles ≥36" wide and obstacle-free
-9. Service Counter Height — lowered counter section reachable from a wheelchair (≤36")
-10. Accessible Signage — ISA symbols marking accessible routes and facilities
+1. Accessible Route — continuous, obstacle-free path from public street or parking to the entrance (curb cuts, no stairs, no gaps)
+2. Accessible Entrance — step-free entry usable independently, not via a side or service door
+3. Door Width & Type — entry doors provide ≥32" clear width AND have automatic or push-button opener
+4. Ramp Availability — ramp with slope ≤1:12 present wherever level changes exist between street and entrance
+5. Accessible Parking — designated accessible spaces with access aisle, located close to the entrance
+6. Elevator / Lift — elevator or platform lift serves all publicly accessible floors (na if confirmed single-story)
+7. Accessible Restroom — at least one restroom has grab bars, ≥60" turning radius, and accessible fixtures
+8. Interior Pathway Width — interior corridors and aisles are ≥36" wide and free of obstacles
+9. Service Counter Height — at least one counter section is ≤36" high for wheelchair reach
+10. Accessible Signage — ISA symbols posted at accessible entrances, restrooms, parking, and routes
 
 Return ONLY this JSON (no explanation, no markdown):
 {
   "checklist": [
     {
       "id": 1,
-      "status": "met",
-      "sourceUrl": "https://...",
-      "sourceLabel": "Google Maps Reviews",
-      "sourceQuote": "verbatim excerpt from the source",
+      "status": "unknown",
+      "sourceUrl": null,
+      "sourceLabel": null,
+      "sourceQuote": null,
       "naReason": null
     }
   ]
@@ -87,9 +94,10 @@ Rules:
 - sourceUrl, sourceLabel, and sourceQuote must be present (non-null) when status is "met" or "not_met"
 - sourceUrl, sourceLabel, and sourceQuote must be null when status is "unknown" or "na"
 - naReason must be a short explanation when status is "na"; null otherwise
-- sourceQuote must be a verbatim excerpt — never paraphrase or invent text
+- sourceQuote must be a verbatim excerpt from the actual source page — never paraphrase or invent text
 - sourceLabel is a short human-readable name for the source (e.g. "Google Reviews", "Yelp", "Official Website", "TripAdvisor", "ADA.gov", "Local News")
 - Return exactly 10 items in order (id 1 through 10)
+- When in doubt, use "unknown" — accuracy matters more than completeness
 `
 
   try {
