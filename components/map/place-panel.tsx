@@ -5,12 +5,13 @@ import { motion } from 'framer-motion'
 import { animate, stagger } from 'animejs'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
 import { EtheralShadow } from '@/components/ui/etheral-shadow'
 import { TextScramble } from '@/components/ui/text-scramble'
 import {
   ChevronLeft, ChevronRight, MapPin,
   Accessibility, ShieldCheck, ArrowUpDown, Car,
-  Globe, X, Layers, CheckCircle2, AlertTriangle,
+  Globe, X, CheckCircle2, AlertTriangle,
 } from 'lucide-react'
 
 interface Place {
@@ -21,20 +22,11 @@ interface Place {
   score?: { grade: string; tags: string[]; summary: string }
 }
 
-const DUMMY = {
-  grade: 'A',
-  adaPercent: 84,
-  compliance: [
-    'Wheelchair accessible entrance',
-    'ADA compliant restrooms',
-    'Elevator on all floors',
-    'Audible crossing signals',
-  ],
-  limitations: [
-    'Accessible parking 80ft from entrance',
-    'Level 2 corridors below min. width',
-  ],
-  tags: ['Wheelchair', 'ADA', 'Elevator', 'Parking'],
+interface BrowserUseInsights {
+  adaPercent: number
+  grade: string
+  compliance: string[]
+  limitations: string[]
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -55,7 +47,6 @@ function typeLabel(types: string[]): string {
   return (first ?? types[0] ?? 'Place').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 
-/** Keep only the street / building name — strip city, state, zip, country */
 function shortAddress(address: string): string {
   return address.split(',')[0].trim()
 }
@@ -108,6 +99,20 @@ function PlaceTitle({ text }: { text: string }) {
   )
 }
 
+// ── ComplianceSkeletons ───────────────────────────────────────────────────────
+function ComplianceSkeletons({ count }: { count: number }) {
+  return (
+    <div className="flex flex-col gap-2">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <Skeleton className="h-2.5 w-2.5 rounded-full flex-shrink-0" />
+          <Skeleton className="h-3" style={{ width: `${65 + (i % 3) * 15}%` }} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 export function PlacePanel({
   place,
@@ -121,13 +126,24 @@ export function PlacePanel({
   const [imgIdx, setImgIdx]       = useState(0)
   const [scramble, setScramble]   = useState(false)
 
-  const insights = place.score
-    ? { grade: place.score.grade, adaPercent: 78, compliance: DUMMY.compliance, limitations: DUMMY.limitations, tags: place.score.tags }
-    : DUMMY
-  const g   = gradeStyle(insights.grade)
-  const pct = insights.adaPercent
+  // BrowserUse state
+  const [buInsights, setBuInsights]     = useState<BrowserUseInsights | null>(null)
+  const [buStatus, setBuStatus]         = useState<'loading' | 'done' | 'error'>('loading')
+  const buPollRef                       = useRef<ReturnType<typeof setInterval> | null>(null)
+  const buPollCountRef                  = useRef(0)
 
-  // Fetch photos
+  // Derived insights: BrowserUse data when ready, fall back to score/defaults
+  const scoreGrade = place.score?.grade ?? 'B'
+  const insights = {
+    grade:       buInsights?.grade      ?? scoreGrade,
+    adaPercent:  buInsights?.adaPercent ?? null,
+    compliance:  buInsights?.compliance ?? null,
+    limitations: buInsights?.limitations ?? null,
+    tags:        place.score?.tags ?? [],
+  }
+  const g   = gradeStyle(insights.grade)
+
+  // ── Fetch photos ──────────────────────────────────────────────────────────
   useEffect(() => {
     setImgIdx(0)
     setPhotoUrls([])
@@ -141,7 +157,73 @@ export function PlacePanel({
       .catch(() => {})
   }, [place.placeId])
 
-  // Entrance animation on the wrapper (so floating button moves with panel)
+  // ── BrowserUse polling ────────────────────────────────────────────────────
+  useEffect(() => {
+    setBuInsights(null)
+    setBuStatus('loading')
+    buPollCountRef.current = 0
+    if (buPollRef.current) clearInterval(buPollRef.current)
+
+    let taskId: string | null = null
+    let cancelled = false
+
+    // Delay start so React StrictMode cleanup fires before fetch begins,
+    // preventing double-invocation from hitting the 3-session concurrent limit.
+    const startTimer = setTimeout(() => {
+      if (cancelled) return
+
+      fetch('/api/places/browseruse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: place.name, address: place.address }),
+      })
+        .then(r => {
+          if (r.status === 429) throw new Error('rate_limited')
+          return r.json()
+        })
+        .then(data => {
+          if (cancelled) {
+            if (data.taskId) fetch(`/api/places/browseruse?taskId=${data.taskId}`, { method: 'DELETE' })
+            return
+          }
+          if (!data.taskId) { setBuStatus('error'); return }
+          taskId = data.taskId
+
+          buPollRef.current = setInterval(async () => {
+            buPollCountRef.current += 1
+            if (buPollCountRef.current > 30) {
+              setBuStatus('error')
+              clearInterval(buPollRef.current!)
+              return
+            }
+            try {
+              const r    = await fetch(`/api/places/browseruse?taskId=${taskId}`)
+              const poll = await r.json()
+              if (poll.status === 'done') {
+                setBuInsights(poll.insights)
+                setBuStatus('done')
+                clearInterval(buPollRef.current!)
+              } else if (poll.status === 'error') {
+                setBuStatus('error')
+                clearInterval(buPollRef.current!)
+              }
+            } catch {
+              // network hiccup — keep polling
+            }
+          }, 6000)
+        })
+        .catch(() => { if (!cancelled) setBuStatus('error') })
+    }, 50)
+
+    return () => {
+      cancelled = true
+      clearTimeout(startTimer)
+      if (buPollRef.current) clearInterval(buPollRef.current)
+      if (taskId) fetch(`/api/places/browseruse?taskId=${taskId}`, { method: 'DELETE' })
+    }
+  }, [place.placeId, place.name, place.address])
+
+  // ── Entrance animation ────────────────────────────────────────────────────
   useEffect(() => {
     const el = wrapperRef.current
     if (!el) return
@@ -157,13 +239,12 @@ export function PlacePanel({
   const imgs     = photoUrls.length > 0 ? photoUrls : [fallback]
 
   return (
-    // ── Outer wrapper: positioned but NO overflow-hidden so button floats above ──
     <div
       ref={wrapperRef}
       className="absolute bottom-4 right-4 z-20 opacity-0"
       style={{ left: 'calc(480px + 2rem)' }}
     >
-      {/* Floating close button — sits above the top-right corner of the panel */}
+      {/* Floating close button */}
       <button
         onClick={onClose}
         className="absolute -top-9 right-0 z-30 flex h-8 w-8 items-center justify-center rounded-full bg-white transition-colors hover:bg-[#f0f3fa]"
@@ -173,7 +254,7 @@ export function PlacePanel({
         <X size={14} style={{ color: '#6b7a99' }} />
       </button>
 
-      {/* ── Inner panel: overflow-hidden for rounded corners ── */}
+      {/* Inner panel */}
       <div
         className="flex flex-col overflow-hidden rounded-2xl bg-white"
         style={{ boxShadow: '0 12px 48px rgba(26,58,180,0.15), 0 2px 14px rgba(0,0,0,0.09)' }}
@@ -181,28 +262,22 @@ export function PlacePanel({
 
         {/* ── 1 · Name + Image ─────────────────────────────── */}
         <div className="pp-s flex items-start gap-4 px-6 pt-6 pb-5 opacity-0">
-          {/* Left column: title centered vertically above meta row */}
+          {/* Left column */}
           <div className="min-w-0 flex-1 flex flex-col justify-between">
             <div className="flex flex-1 flex-col justify-center">
               <PlaceTitle text={place.name} />
             </div>
 
-            {/* Type · address · tags — all on one line */}
+            {/* Type · address · tags */}
             <div className="flex items-center gap-2 overflow-hidden mt-2" style={{ whiteSpace: 'nowrap' }}>
-              {/* Type identifier — plain text, no color badge */}
               <span className="flex-shrink-0 text-[11px] font-semibold" style={{ color: '#9aa0b8' }}>
                 {typeLabel(place.types)}
               </span>
-
               <span style={{ color: '#d0d5e0' }}>·</span>
-
-              {/* Address (locality stripped) */}
               <span className="flex shrink items-center gap-1 text-[11px] font-medium overflow-hidden" style={{ color: '#6b7a99' }}>
                 <MapPin size={10} className="flex-shrink-0" />
                 <span className="truncate">{shortAddress(place.address)}</span>
               </span>
-
-              {/* Tags inline — hidden if they overflow */}
               {insights.tags.length > 0 && (
                 <>
                   <span style={{ color: '#d0d5e0' }} className="flex-shrink-0">·</span>
@@ -220,7 +295,7 @@ export function PlacePanel({
             </div>
           </div>
 
-          {/* Right: image gallery — explicit height so container is never driven by image */}
+          {/* Image gallery */}
           <div className="relative w-[188px] flex-shrink-0 overflow-hidden rounded-xl bg-[#f0f3fa]" style={{ height: 130 }}>
             <img
               key={`${place.placeId}-${imgIdx}`}
@@ -261,7 +336,7 @@ export function PlacePanel({
           className="pp-s opacity-0"
           style={{ background: 'linear-gradient(160deg, #eef3ff 0%, #f5f8ff 100%)', borderBottom: '1px solid #dce6fc' }}
         >
-          {/* Header row: title (left) ↔ large pct + grade (right, same height) */}
+          {/* Header: title (left) ↔ large pct + grade (right) */}
           <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-0">
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: '#1a73e8' }}>
@@ -277,68 +352,98 @@ export function PlacePanel({
                     BETA
                   </span>
                 </div>
-                <p className="mt-1 text-[11px] font-semibold" style={{ color: '#6b7a99' }}>
-                  ADA Compliance Analysis
-                </p>
+                {buStatus === 'loading' ? (
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#1a73e8' }} />
+                    <span className="text-[11px] font-semibold" style={{ color: '#1a73e8' }}>
+                      Scanning accessibility data…
+                    </span>
+                  </div>
+                ) : (
+                  <p className="mt-1 text-[11px] font-semibold" style={{ color: '#6b7a99' }}>
+                    ADA Compliance Analysis
+                  </p>
+                )}
               </div>
             </div>
 
-            {/* Percentage + grade — both at the same font size so same visual height */}
+            {/* Percentage + grade — same font size */}
             <div className="flex items-center gap-2 flex-shrink-0">
-              {/* Percentage */}
-              <div className="text-center">
-                <p className="text-[46px] font-black leading-none tracking-tight" style={{ color: '#1a2035' }}>{pct}%</p>
-                <p className="text-[8px] font-bold uppercase tracking-widest mt-1" style={{ color: '#9aa0b8' }}>ADA met</p>
-              </div>
-
-              <span className="text-[28px] font-thin" style={{ color: '#d0d5e0' }}>/</span>
-
-              {/* Grade badge */}
-              <div className="flex flex-col items-center rounded-xl px-3.5 py-2" style={{ backgroundColor: g.bg }}>
-                <span className="text-[46px] font-black leading-none tracking-tight text-white">{insights.grade}</span>
-                <span className="text-[8px] font-bold uppercase tracking-widest text-white/60 mt-1">{g.label}</span>
-              </div>
+              {buStatus === 'loading' ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex flex-col items-center gap-1">
+                    <Skeleton className="h-11 w-16 rounded-lg" />
+                    <Skeleton className="h-2.5 w-12 rounded" />
+                  </div>
+                  <Skeleton className="h-[2px] w-4" />
+                  <Skeleton className="h-16 w-14 rounded-xl" />
+                </div>
+              ) : (
+                <>
+                  <div className="text-center">
+                    <p className="text-[46px] font-black leading-none tracking-tight" style={{ color: '#1a2035' }}>
+                      {insights.adaPercent ?? '--'}%
+                    </p>
+                    <p className="text-[8px] font-bold uppercase tracking-widest mt-1" style={{ color: '#9aa0b8' }}>ADA met</p>
+                  </div>
+                  <span className="text-[28px] font-thin" style={{ color: '#d0d5e0' }}>/</span>
+                  <div className="flex flex-col items-center rounded-xl px-3.5 py-2" style={{ backgroundColor: g.bg }}>
+                    <span className="text-[46px] font-black leading-none tracking-tight text-white">{insights.grade}</span>
+                    <span className="text-[8px] font-bold uppercase tracking-widest text-white/60 mt-1">{g.label}</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
           {/* Progress bar */}
           <div className="mx-6 mt-3 mb-4 h-[5px] overflow-hidden rounded-full" style={{ backgroundColor: '#d4defa' }}>
-            <div
-              className="h-full rounded-full"
-              style={{ width: `${pct}%`, background: 'linear-gradient(90deg, #1a73e8, #34a853)' }}
-            />
+            {buStatus === 'loading' ? (
+              <Skeleton className="h-full w-full rounded-full" />
+            ) : (
+              <div
+                className="h-full rounded-full transition-all duration-700"
+                style={{ width: `${insights.adaPercent ?? 0}%`, background: 'linear-gradient(90deg, #1a73e8, #34a853)' }}
+              />
+            )}
           </div>
 
           {/* Compliance + Limitations */}
           <div className="grid grid-cols-2 gap-0 px-6 pb-5">
             <div className="pr-5" style={{ borderRight: '1px solid #dce6fc' }}>
-              {/* No icon in header — plain larger text */}
               <p className="mb-2.5 text-[12px] font-black uppercase tracking-wide" style={{ color: '#1e8e3e' }}>
                 Areas of Compliance
               </p>
-              <div className="flex flex-col gap-1.5">
-                {insights.compliance.map(item => (
-                  <div key={item} className="flex items-start gap-2">
-                    <CheckCircle2 size={11} className="mt-0.5 flex-shrink-0" style={{ color: '#1e8e3e' }} />
-                    <span className="text-[11px] font-medium leading-snug" style={{ color: '#2d3a50' }}>{item}</span>
-                  </div>
-                ))}
-              </div>
+              {buStatus === 'loading' ? (
+                <ComplianceSkeletons count={4} />
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {(insights.compliance ?? []).map(item => (
+                    <div key={item} className="flex items-start gap-2">
+                      <CheckCircle2 size={11} className="mt-0.5 flex-shrink-0" style={{ color: '#1e8e3e' }} />
+                      <span className="text-[11px] font-medium leading-snug" style={{ color: '#2d3a50' }}>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="pl-5">
-              {/* No icon in header */}
               <p className="mb-2.5 text-[12px] font-black uppercase tracking-wide" style={{ color: '#fa7b17' }}>
                 Limitations
               </p>
-              <div className="flex flex-col gap-1.5">
-                {insights.limitations.map(item => (
-                  <div key={item} className="flex items-start gap-2">
-                    <AlertTriangle size={11} className="mt-0.5 flex-shrink-0" style={{ color: '#fa7b17' }} />
-                    <span className="text-[11px] font-medium leading-snug" style={{ color: '#2d3a50' }}>{item}</span>
-                  </div>
-                ))}
-              </div>
+              {buStatus === 'loading' ? (
+                <ComplianceSkeletons count={2} />
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {(insights.limitations ?? []).map(item => (
+                    <div key={item} className="flex items-start gap-2">
+                      <AlertTriangle size={11} className="mt-0.5 flex-shrink-0" style={{ color: '#fa7b17' }} />
+                      <span className="text-[11px] font-medium leading-snug" style={{ color: '#2d3a50' }}>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -353,7 +458,6 @@ export function PlacePanel({
             aria-label="Enter Projective View"
             onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') e.currentTarget.click() }}
           >
-            {/* EtheralShadow background */}
             <EtheralShadow
               className="absolute inset-0"
               color="rgba(26, 55, 210, 1)"
@@ -361,8 +465,6 @@ export function PlacePanel({
               noise={{ opacity: 0.5, scale: 1.1 }}
               sizing="fill"
             />
-
-            {/* Text overlay */}
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1">
               <TextScramble
                 as="span"
