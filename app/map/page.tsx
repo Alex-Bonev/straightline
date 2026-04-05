@@ -74,7 +74,7 @@ function MapLoadingText({ font }: { font: string }) {
           speed={0.04}
           onScrambleComplete={advance}
           className="select-none text-[30px] font-extrabold tracking-tight"
-          style={{ color: '#1a3a6b', letterSpacing: '-0.02em' }}
+          style={{ color: '#006b58', letterSpacing: '-0.02em' }}
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -14 }}
@@ -106,7 +106,7 @@ function LocationCard({ place, selected, onClick, onView3D }: { place: Place; se
       onClick={onClick}
       className={`relative flex-row gap-0 overflow-hidden rounded-2xl border p-0 shadow-sm transition-all duration-200 cursor-pointer group min-h-[76px]
         ${selected
-          ? 'border-[#1a73e8] shadow-[0_4px_20px_rgba(26,115,232,0.22)] bg-[#f0f6ff]'
+          ? 'border-[#009E85] shadow-[0_4px_20px_rgba(0,158,133,0.22)] bg-[#edfaf7]'
           : 'border-[#eaecf0] hover:shadow-[0_4px_16px_rgba(0,0,0,0.09)] hover:border-[#c8d0e0]'
         }`}
     >
@@ -118,15 +118,15 @@ function LocationCard({ place, selected, onClick, onView3D }: { place: Place; se
             className="absolute inset-0 h-full w-full object-cover"
           />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: '#1a73e814' }}>
-            <MapPin size={18} style={{ color: '#1a73e8' }} />
+          <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: '#009E8514' }}>
+            <MapPin size={18} style={{ color: '#009E85' }} />
           </div>
         )}
       </div>
 
       <div className="relative flex min-w-0 flex-1 flex-col justify-center px-3.5 py-3">
         <h3 className="truncate text-[13.5px] font-bold leading-snug transition-colors"
-          style={{ color: selected ? '#1a52b4' : '#1a2035' }}>
+          style={{ color: selected ? '#007a67' : '#1a2035' }}>
           {place.name}
         </h3>
         <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium truncate" style={{ color: '#6b7a99' }}>
@@ -138,8 +138,8 @@ function LocationCard({ place, selected, onClick, onView3D }: { place: Place; se
       {/* View in 3D button */}
       <button
         onClick={(e) => { e.stopPropagation(); onView3D(place) }}
-        className="absolute bottom-2 right-2 z-10 flex h-6 items-center gap-1 rounded-full px-2 text-[9px] font-bold transition-colors hover:bg-[#1a73e8] hover:text-white"
-        style={{ backgroundColor: '#e8f0fe', color: '#1a52b4' }}
+        className="absolute bottom-2 right-2 z-10 flex h-6 items-center gap-1 rounded-full px-2 text-[9px] font-bold transition-colors hover:bg-[#009E85] hover:text-white"
+        style={{ backgroundColor: '#e0f5f1', color: '#007a67' }}
         title="View in 3D"
       >
         <Box size={10} />
@@ -371,7 +371,7 @@ export default function MapPage() {
   })()
 
   return (
-    <div className={`${nunito.className} relative h-screen overflow-hidden bg-[#dce8fb]`}>
+    <div className={`${nunito.className} relative h-screen overflow-hidden bg-[#e0f5f1]`}>
 
       {/* Map — fills the full canvas */}
       <main className="absolute inset-0">
@@ -394,7 +394,7 @@ export default function MapPage() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.9, ease: 'easeInOut' }}
             >
-              <Waves backgroundColor="#dce8fb" strokeColor="rgba(26,82,180,0.18)" pointerSize={0.5} />
+              <Waves backgroundColor="#e0f5f1" strokeColor="rgba(0,158,133,0.18)" pointerSize={0.5} />
               <MapLoadingText font={nunito.className} />
             </motion.div>
           )}
@@ -406,7 +406,7 @@ export default function MapPage() {
           style={{ boxShadow: '0 2px 10px rgba(0,0,0,0.14)' }}
           aria-label="Center on my location"
         >
-          <Locate size={18} style={{ color: '#1a73e8' }} />
+          <Locate size={18} style={{ color: '#009E85' }} />
         </Button>
 
         {/* Place detail panel */}
@@ -424,15 +424,17 @@ export default function MapPage() {
       <aside
         ref={sidebarRef}
         className="map-sidebar absolute bottom-0 left-0 right-0 z-20 flex w-full flex-shrink-0 flex-col overflow-hidden rounded-t-2xl bg-white md:bottom-4 md:left-4 md:right-auto md:top-4 md:w-[480px] md:rounded-2xl"
-        style={{ boxShadow: '0 8px 40px rgba(26,58,180,0.13), 0 2px 12px rgba(0,0,0,0.07)' }}
+        style={{ boxShadow: '0 8px 40px rgba(0,158,133,0.13), 0 2px 12px rgba(0,0,0,0.07)' }}
       >
         {/* Header */}
         <div className="sidebar-header flex items-center gap-4 px-6 py-5 opacity-0" style={{ borderBottom: '1px solid #eef0f4' }}>
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: '#1a73e8' }}>
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: '#009E85' }}>
             <Navigation size={16} className="text-white" />
           </div>
           <div>
-            <h1 className="text-[18px] font-black leading-none tracking-tight" style={{ color: '#1a2035' }}>Straightline</h1>
+            <h1 style={{ fontFamily: 'var(--font-cormorant)', fontWeight: 300, fontSize: '1.6rem', lineHeight: 1, letterSpacing: '-0.02em', color: '#1A1612' }}>
+              Straight<em style={{ fontStyle: 'italic', color: '#009E85', letterSpacing: '-0.03em' }}>line</em>
+            </h1>
             <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: '#8a9abf' }}>Accessibility Navigation</p>
           </div>
         </div>
@@ -448,7 +450,7 @@ export default function MapPage() {
               onFocus={(e) => {
                 if (suggestions.length > 0) setShowSuggestions(true)
                 e.currentTarget.style.backgroundColor = '#fff'
-                e.currentTarget.style.boxShadow = '0 0 0 2px #1a73e8, 0 2px 12px rgba(26,115,232,0.12)'
+                e.currentTarget.style.boxShadow = '0 0 0 2px #009E85, 0 2px 12px rgba(0,158,133,0.12)'
                 e.currentTarget.style.borderColor = 'transparent'
               }}
               onBlur={(e) => {
@@ -466,7 +468,7 @@ export default function MapPage() {
           {showSuggestions && suggestions.length > 0 && (
             <div className="absolute left-5 right-5 top-[calc(100%-10px)] z-30 overflow-hidden rounded-2xl border border-[#e8eaed] bg-white shadow-xl">
               {suggestions.map((s) => (
-                <button key={s.placeId} onMouseDown={() => handleSuggestionSelect(s)} className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-[#f0f4ff]">
+                <button key={s.placeId} onMouseDown={() => handleSuggestionSelect(s)} className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-[#edfaf7]">
                   <MapPin size={14} className="mt-0.5 flex-shrink-0" style={{ color: '#9aa0b8' }} />
                   <div className="min-w-0">
                     <p className="truncate text-[13px] font-semibold" style={{ color: '#1a2035' }}>{s.mainText}</p>
@@ -483,9 +485,9 @@ export default function MapPage() {
               <p className="mb-2 px-1 text-[9px] font-black uppercase tracking-[0.18em]" style={{ color: '#b0b8d0' }}>Try searching</p>
               <div className="flex flex-col gap-0.5">
                 {SUGGESTED_PROMPTS.map((prompt, i) => (
-                  <Button key={i} variant="ghost" onClick={() => { setQuery(prompt); handleSearch(prompt) }} className="h-auto w-full justify-start rounded-xl px-3 py-2.5 text-left hover:bg-[#f0f4ff]" style={{ color: '#1a52b4' }}>
-                    <div className="mr-3 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: '#e8f0fe' }}>
-                      <Search size={10} style={{ color: '#1a73e8' }} />
+                  <Button key={i} variant="ghost" onClick={() => { setQuery(prompt); handleSearch(prompt) }} className="h-auto w-full justify-start rounded-xl px-3 py-2.5 text-left hover:bg-[#edfaf7]" style={{ color: '#007a67' }}>
+                    <div className="mr-3 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: '#e0f5f1' }}>
+                      <Search size={10} style={{ color: '#009E85' }} />
                     </div>
                     <span className="text-[13px] font-semibold">{prompt}</span>
                     <ChevronRight size={12} className="ml-auto flex-shrink-0 opacity-30" />
@@ -500,12 +502,12 @@ export default function MapPage() {
         <div className="flex flex-1 flex-col overflow-hidden min-h-0">
           <div className="nearby-header flex items-center justify-between px-6 pb-4 pt-5 opacity-0 flex-shrink-0">
             <div className="flex items-center gap-2">
-              <Layers size={14} style={{ color: '#1a73e8' }} />
+              <Layers size={14} style={{ color: '#009E85' }} />
               <h2 className="text-[13px] font-black uppercase tracking-[0.06em]" style={{ color: '#1a2035' }}>
                 {query ? 'Search Results' : 'Nearby Locations'}
               </h2>
             </div>
-            <Badge className="h-auto rounded-full border-none px-2.5 py-1 text-[10px] font-bold" style={{ backgroundColor: '#e8f0fe', color: '#1a52b4' }}>
+            <Badge className="h-auto rounded-full border-none px-2.5 py-1 text-[10px] font-bold" style={{ backgroundColor: '#e0f5f1', color: '#007a67' }}>
               {places.length} found
             </Badge>
           </div>
@@ -538,8 +540,8 @@ export default function MapPage() {
                     <Button
                       variant="ghost"
                       onClick={() => setVisibleCount((c) => c + 5)}
-                      className="w-full rounded-xl py-3 text-[13px] font-semibold hover:bg-[#f0f4ff]"
-                      style={{ color: '#1a52b4' }}
+                      className="w-full rounded-xl py-3 text-[13px] font-semibold hover:bg-[#edfaf7]"
+                      style={{ color: '#007a67' }}
                     >
                       Show {Math.min(5, places.length - visibleCount)} more
                     </Button>

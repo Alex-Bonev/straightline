@@ -94,9 +94,9 @@ const MapInner = forwardRef<GoogleMapHandle, Props>(function MapInner(
             width: 18,
             height: 18,
             borderRadius: '50%',
-            backgroundColor: '#1a73e8',
+            backgroundColor: '#009E85',
             border: '3px solid #fff',
-            boxShadow: '0 2px 10px rgba(26,115,232,0.55)',
+            boxShadow: '0 2px 10px rgba(0,158,133,0.55)',
           }} />
         </AdvancedMarker>
       )}
@@ -108,7 +108,7 @@ const MapInner = forwardRef<GoogleMapHandle, Props>(function MapInner(
           onClick={() => onMarkerClick?.(place.placeId)}
         >
           <Pin
-            background="#1a73e8"
+            background="#009E85"
             borderColor={selectedPlaceId === place.placeId ? '#fff' : 'transparent'}
             glyphColor="#fff"
             scale={selectedPlaceId === place.placeId ? 1.4 : 1}

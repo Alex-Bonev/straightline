@@ -121,8 +121,8 @@ function ChecklistRow({
             textTransform: 'uppercase',
             padding: '3px 6px',
             borderRadius: 4,
-            background: isOpen ? '#1a52b4' : '#e8f0fe',
-            color: isOpen ? 'white' : '#1a52b4',
+            background: isOpen ? '#007a67' : '#e0f5f1',
+            color: isOpen ? 'white' : '#007a67',
             border: 'none',
             cursor: 'pointer',
             flexShrink: 0,
@@ -174,7 +174,7 @@ function ChecklistRow({
             <>
               <div style={{
                 fontSize: 11, color: '#2d3a50', fontStyle: 'italic', lineHeight: 1.5,
-                background: '#f5f8ff', borderLeft: '3px solid #1a73e8',
+                background: '#edfaf7', borderLeft: '3px solid #009E85',
                 padding: '6px 8px', borderRadius: '0 4px 4px 0', marginBottom: 6,
               }}>
                 &ldquo;{item.sourceQuote}&rdquo;
@@ -186,7 +186,7 @@ function ChecklistRow({
                     href={item.sourceUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ color: '#1a73e8', textDecoration: 'underline', fontWeight: 600 }}
+                    style={{ color: '#009E85', textDecoration: 'underline', fontWeight: 600 }}
                   >
                     {item.sourceLabel ?? 'Source'}
                   </a>
@@ -235,7 +235,7 @@ function PlaceTitle({ text }: { text: string }) {
       <motion.svg
         width="100%" height="14" viewBox="0 0 300 14"
         className="absolute bottom-0 left-0"
-        style={{ color: '#1a73e8' }}
+        style={{ color: '#009E85' }}
       >
         <motion.path
           d="M 0,6 Q 75,0 150,6 Q 225,12 300,6"
@@ -408,7 +408,7 @@ export function PlacePanel({
       {/* Inner panel */}
       <div
         className="flex flex-col overflow-hidden rounded-2xl bg-white"
-        style={{ boxShadow: '0 12px 48px rgba(26,58,180,0.15), 0 2px 14px rgba(0,0,0,0.09)' }}
+        style={{ boxShadow: '0 12px 48px rgba(0,158,133,0.15), 0 2px 14px rgba(0,0,0,0.09)' }}
       >
 
         {/* ── 1 · Name + Image ─────────────────────────────── */}
@@ -471,22 +471,18 @@ export function PlacePanel({
         {/* ── 2 · BrowserUse Insights ───────────────────────── */}
         <div
           className="pp-s opacity-0"
-          style={{ background: 'linear-gradient(160deg, #eef3ff 0%, #f5f8ff 100%)', borderBottom: '1px solid #dce6fc' }}
+          style={{ background: 'linear-gradient(160deg, #eef3ff 0%, #edfaf7 100%)', borderBottom: '1px solid #dce6fc' }}
         >
           {/* Header */}
           <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-0">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: '#1a73e8' }}>
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: '#009E85' }}>
                 <Globe size={17} className="text-white" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-[19px] font-black leading-none tracking-tight" style={{ color: '#1a2035' }}>
                     BrowserUse Insights
-                  </span>
-                  <span className="rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest"
-                    style={{ backgroundColor: '#fff3e0', color: '#bf5000' }}>
-                    BETA
                   </span>
                 </div>
                 <div className="flex items-center gap-1 mt-1">
@@ -503,7 +499,7 @@ export function PlacePanel({
                       onMouseLeave={() => setAdaTooltipVisible(false)}
                       onFocus={() => setAdaTooltipVisible(true)}
                       onBlur={() => setAdaTooltipVisible(false)}
-                      style={{ width: 14, height: 14, borderRadius: '50%', background: '#e8f0fe', color: '#1a52b4', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'help', flexShrink: 0 }}
+                      style={{ width: 14, height: 14, borderRadius: '50%', background: '#e0f5f1', color: '#007a67', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'help', flexShrink: 0 }}
                     >
                       i
                     </span>
@@ -517,8 +513,8 @@ export function PlacePanel({
                 </div>
                 {buStatus === 'loading' && (
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className="inline-block h-1.5 w-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#1a73e8' }} />
-                    <span className="text-[11px] font-semibold" style={{ color: '#1a73e8' }}>
+                    <span className="inline-block h-1.5 w-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#009E85' }} />
+                    <span className="text-[11px] font-semibold" style={{ color: '#009E85' }}>
                       Scanning accessibility data…
                     </span>
                   </div>
