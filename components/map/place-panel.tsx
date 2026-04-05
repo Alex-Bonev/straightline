@@ -241,7 +241,7 @@ export function PlacePanel({
   return (
     <div
       ref={wrapperRef}
-      className="absolute bottom-4 right-4 z-20 opacity-0"
+      className="place-panel-wrapper absolute bottom-4 right-4 z-30 opacity-0"
       style={{ left: 'calc(480px + 2rem)' }}
     >
       {/* Floating close button */}

@@ -137,3 +137,45 @@
   0%, 100% { opacity: 1; transform: scale(1); }
   50%       { opacity: 0.45; transform: scale(0.7); }
 }
+
+/* ── Mobile responsive ─────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+
+  /* Homepage */
+  .home-root     { overflow-y: auto !important; }
+  .home-right-col { display: none !important; }
+  .home-left-col {
+    width: 100% !important;
+    padding: 56px 28px 48px !important;
+    justify-content: flex-start !important;
+  }
+  .home-title { font-size: clamp(3.4rem, 13vw, 5rem) !important; }
+  .home-stat-row {
+    position: relative !important;
+    left: auto !important;
+    bottom: auto !important;
+    padding-left: 0 !important;
+    margin-top: 2.5rem;
+  }
+
+  /* Map — PlacePanel as full-width bottom sheet */
+  .place-panel-wrapper {
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+
+  /* Map sidebar — drag handle */
+  .map-sidebar::before {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(26, 32, 53, 0.15);
+    margin: 12px auto 0;
+    flex-shrink: 0;
+  }
+}

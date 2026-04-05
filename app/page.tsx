@@ -122,6 +122,7 @@ export default function Home() {
   return (
     <main
       aria-label="Straightline — Spatial Accessibility"
+      className="home-root"
       style={{ display: "flex", height: "100vh", overflow: "hidden", background: T.bg, position: "relative" }}
     >
       {/* ── Grain ── */}
@@ -139,6 +140,7 @@ export default function Home() {
       {/* ══════════════════════ LEFT COLUMN ══════════════════════ */}
       <section
         aria-label="Hero content"
+        className="home-left-col"
         style={{ width: "43%", flexShrink: 0, display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 44px 0 72px", position: "relative", zIndex: 10 }}
       >
         {/* Eyebrow */}
@@ -153,6 +155,7 @@ export default function Home() {
         <motion.h1
           initial={{ opacity: 0, y: 28 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1.1, delay: 0.25, ease: [0.16, 1, 0.3, 1] }}
+          className="home-title"
           style={{ fontFamily: "var(--font-cormorant)", fontWeight: 300, fontSize: "clamp(4.8rem, 8.2vw, 9.2rem)", lineHeight: 0.87, letterSpacing: "-0.02em", color: T.titleBase, marginBottom: "2.25rem" }}
         >
           Straight
@@ -222,6 +225,7 @@ export default function Home() {
         <motion.div
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1, delay: 1.1 }}
           aria-hidden="true"
+          className="home-stat-row"
           style={{ position: "absolute", bottom: 28, left: 72, display: "flex", gap: "1.8rem" }}
         >
           {[
@@ -238,7 +242,7 @@ export default function Home() {
       </section>
 
       {/* ══════════════════════ RIGHT — FALLING FRAMES ══════════════════════ */}
-      <div aria-hidden="true" style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+      <div aria-hidden="true" className="home-right-col" style={{ flex: 1, position: "relative", overflow: "hidden" }}>
         {/* Subtle dot grid texture */}
         <BGPattern
           variant="dots"

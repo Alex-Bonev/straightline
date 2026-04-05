@@ -472,8 +472,7 @@ export default function MapPage() {
 
         <Button
           variant="outline" size="icon" onClick={handleLocateMe}
-          className="absolute z-20 rounded-full border-[#dadce0] bg-white hover:bg-[#f1f3f4]"
-          style={{ bottom: 62, right: 10 }}
+          className="absolute right-4 top-4 z-20 rounded-full border-[#dadce0] bg-white hover:bg-[#f1f3f4] md:top-auto md:bottom-[62px] md:right-[10px]"
           style={{ boxShadow: '0 2px 10px rgba(0,0,0,0.14)' }}
           aria-label="Center on my location"
         >
@@ -493,7 +492,7 @@ export default function MapPage() {
       {/* Floating sidebar */}
       <aside
         ref={sidebarRef}
-        className="absolute bottom-4 left-4 top-4 z-20 flex w-[480px] flex-shrink-0 flex-col overflow-hidden rounded-2xl bg-white"
+        className="map-sidebar absolute bottom-0 left-0 right-0 z-20 flex max-h-[65vh] w-full flex-shrink-0 flex-col overflow-hidden rounded-t-2xl bg-white md:bottom-4 md:left-4 md:right-auto md:top-4 md:max-h-none md:w-[480px] md:rounded-2xl"
         style={{ boxShadow: '0 8px 40px rgba(26,58,180,0.13), 0 2px 12px rgba(0,0,0,0.07)' }}
       >
         {/* Header */}
