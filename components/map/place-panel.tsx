@@ -88,6 +88,7 @@ function ChecklistRow({
   onToggle: () => void
 }) {
   const info = CHECKLIST_INFO[item.id]
+  if (!info) return null
   const { icon, itemBg, itemBorder, iconColor, slideColor } = statusStyle(item.status)
 
   return (
@@ -137,8 +138,8 @@ function ChecklistRow({
         border: `1.5px solid ${isOpen ? slideColor : 'transparent'}`,
         borderTop: 'none',
         borderRadius: '0 0 8px 8px',
-        maxHeight: isOpen ? 320 : 0,
-        overflow: 'hidden',
+        maxHeight: isOpen ? 600 : 0,
+        overflow: isOpen ? 'auto' : 'hidden',
         transition: 'max-height 0.28s ease, padding 0.28s ease, border-color 0.15s ease',
         padding: isOpen ? '11px 9px 10px' : '0 9px',
         marginTop: -4,
@@ -282,6 +283,8 @@ export function PlacePanel({
     setBuStatus('loading')
     buPollCountRef.current = 0
     if (buPollRef.current) clearInterval(buPollRef.current)
+    setOpenInfoId(null)
+    setAdaTooltipVisible(false)
 
     let taskId: string | null = null
     let cancelled = false
@@ -464,8 +467,13 @@ export function PlacePanel({
                   {/* ADA info tooltip */}
                   <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
                     <span
+                      tabIndex={0}
+                      role="button"
+                      aria-label="What is the ADA?"
                       onMouseEnter={() => setAdaTooltipVisible(true)}
                       onMouseLeave={() => setAdaTooltipVisible(false)}
+                      onFocus={() => setAdaTooltipVisible(true)}
+                      onBlur={() => setAdaTooltipVisible(false)}
                       style={{ width: 14, height: 14, borderRadius: '50%', background: '#e8f0fe', color: '#1a52b4', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'help', flexShrink: 0 }}
                     >
                       i
