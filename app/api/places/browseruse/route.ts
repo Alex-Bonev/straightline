@@ -22,12 +22,20 @@ export async function POST(request: NextRequest) {
   }
 
   const task = `
-Search the web for physical accessibility information about "${name}" located at "${address}".
+You are an ADA accessibility researcher. Search exhaustively for physical accessibility information about "${name}" located at "${address}".
 
-Check Google Maps reviews, Yelp reviews, the official website, and any local accessibility review sites.
+Search ALL of the following — do not stop after the first source:
+- Google Maps listing and reviews (search "site:google.com/maps ${name} ${address}" and browse the listing)
+- Yelp reviews (search "site:yelp.com ${name} ${address}")
+- The official website for this location (look for an "Accessibility" or "Visitor Information" page)
+- TripAdvisor, Foursquare, or any venue review site
+- Local news articles or blog posts mentioning accessibility at this location
+- ADA.gov or any government inspection / compliance database
+- The building's Wikipedia page if one exists
+- Any disability advocacy or accessibility review site (e.g. WheelMate, AccessNow, AXSMap)
 
 For each of the 10 items below, determine whether it is met, not_met, unknown, or na.
-Return a JSON object with exactly 10 checklist items in the same order.
+Push hard to reach a "met" or "not_met" conclusion — use "unknown" only as a last resort when you truly found nothing. If direct evidence is scarce, use indirect signals: building type, construction era, local ADA enforcement records, similar venues in the area, street-view imagery descriptions, or logical inference from venue type (e.g. a modern hospital almost certainly has an elevator).
 
 Items:
 1. Accessible Route — continuous path from street/parking to entrance (curb cuts, no stairs)
@@ -48,6 +56,7 @@ Return ONLY this JSON (no explanation, no markdown):
       "id": 1,
       "status": "met",
       "sourceUrl": "https://...",
+      "sourceLabel": "Google Maps Reviews",
       "sourceQuote": "verbatim excerpt from the source",
       "naReason": null
     }
@@ -56,10 +65,11 @@ Return ONLY this JSON (no explanation, no markdown):
 
 Rules:
 - status must be exactly one of: "met", "not_met", "unknown", "na"
-- sourceUrl and sourceQuote must be present (non-null) when status is "met" or "not_met"
-- sourceUrl and sourceQuote must be null when status is "unknown" or "na"
+- sourceUrl, sourceLabel, and sourceQuote must be present (non-null) when status is "met" or "not_met"
+- sourceUrl, sourceLabel, and sourceQuote must be null when status is "unknown" or "na"
 - naReason must be a short explanation when status is "na"; null otherwise
 - sourceQuote must be a verbatim excerpt — never paraphrase or invent text
+- sourceLabel is a short human-readable name for the source (e.g. "Google Reviews", "Yelp", "Official Website", "TripAdvisor", "ADA.gov", "Local News")
 - Return exactly 10 items in order (id 1 through 10)
 `
 
@@ -193,6 +203,7 @@ Return this exact JSON (no extra text, no markdown):
       "id": 1,
       "status": "met",
       "sourceUrl": null,
+      "sourceLabel": null,
       "sourceQuote": null,
       "naReason": null
     }
@@ -202,9 +213,10 @@ Return this exact JSON (no extra text, no markdown):
 Rules:
 - Include exactly 10 items (id 1–10) in order
 - status: "met", "not_met", "unknown", or "na"
-- sourceUrl/sourceQuote: non-null only when status is "met" or "not_met"
+- sourceUrl/sourceLabel/sourceQuote: non-null only when status is "met" or "not_met"
 - naReason: non-null only when status is "na"
 - Never invent sourceUrl or sourceQuote — use null if not found in the text
+- sourceLabel is a short human-readable name for the source (e.g. "Google Reviews", "Yelp", "Official Website")
 
 Items in order:
 1. Accessible Route

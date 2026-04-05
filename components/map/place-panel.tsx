@@ -25,6 +25,7 @@ interface ChecklistItem {
   id: number
   status: ChecklistItemStatus
   sourceUrl: string | null
+  sourceLabel: string | null
   sourceQuote: string | null
   naReason: string | null
 }
@@ -174,20 +175,25 @@ function ChecklistRow({
               <div style={{
                 fontSize: 11, color: '#2d3a50', fontStyle: 'italic', lineHeight: 1.5,
                 background: '#f5f8ff', borderLeft: '3px solid #1a73e8',
-                padding: '6px 8px', borderRadius: '0 4px 4px 0', marginBottom: 5,
+                padding: '6px 8px', borderRadius: '0 4px 4px 0', marginBottom: 6,
               }}>
                 &ldquo;{item.sourceQuote}&rdquo;
               </div>
-              {item.sourceUrl && (
-                <a
-                  href={item.sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ fontSize: 10, color: '#1a73e8', textDecoration: 'none', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 3 }}
-                >
-                  🔗 View source →
-                </a>
-              )}
+              <div style={{ fontSize: 10, color: '#6b7a99' }}>
+                —{' '}
+                {item.sourceUrl ? (
+                  <a
+                    href={item.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: '#1a73e8', textDecoration: 'underline', fontWeight: 600 }}
+                  >
+                    {item.sourceLabel ?? 'Source'}
+                  </a>
+                ) : (
+                  <span style={{ fontWeight: 600 }}>{item.sourceLabel ?? 'Source'}</span>
+                )}
+              </div>
             </>
           ) : (
             <div style={{ fontSize: 11, color: '#9aa0b8', fontStyle: 'italic' }}>
