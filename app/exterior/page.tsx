@@ -14,7 +14,6 @@ import {
   AltitudeMode,
   type Map3DRef,
   type Map3DClickEvent,
-  type Map3DSteadyChangeEvent,
 } from '@vis.gl/react-google-maps'
 
 const nunito = Nunito({
@@ -62,8 +61,7 @@ function ExteriorView() {
   const placeId = params.get('placeId') ?? ''
   const scopedId = `ext_${placeId}`
 
-  const map3dRef     = useRef<Map3DRef>(null)
-  const flyInDoneRef = useRef(false)
+  const map3dRef = useRef<Map3DRef>(null)
 
   const [annotateMode,       setAnnotateMode]       = useState(false)
   const [annotations,        setAnnotations]        = useState<ExteriorAnnotation[]>([])
@@ -74,20 +72,6 @@ function ExteriorView() {
   const [editingAnnotation,  setEditingAnnotation]  = useState(false)
   const [editNote,           setEditNote]           = useState('')
   const [editLabel,          setEditLabel]          = useState<typeof LABEL_OPTIONS[number]>('accessible_entrance')
-
-  const handleSteadyChange = useCallback((e: Map3DSteadyChangeEvent) => {
-    if (!e.detail.isSteady || flyInDoneRef.current) return
-    flyInDoneRef.current = true
-    map3dRef.current?.flyCameraTo({
-      endCamera: {
-        center: { lat, lng, altitude: 300 },
-        tilt: 65,
-        range: 500,
-        heading: 0,
-      },
-      durationMilliseconds: 2500,
-    })
-  }, [lat, lng])
 
   const handleMapClick = useCallback((e: Map3DClickEvent) => {
     if (!annotateMode) return
@@ -177,7 +161,8 @@ function ExteriorView() {
   }, [selectedAnnotation, editNote, editLabel])
 
   return (
-    <div className={`${nunito.className} flex h-screen flex-col overflow-hidden bg-white`}>
+    <div className={`${nunito.className} flex h-screen items-stretch p-3`} style={{ backgroundColor: '#e0f5f1' }}>
+      <div className="flex flex-1 flex-col overflow-hidden rounded-2xl bg-white" style={{ boxShadow: '0 4px 24px rgba(0,158,133,0.12)' }}>
       {/* ── Top bar ────────────────────────────────────────────────────── */}
       <header
         className="flex flex-shrink-0 items-center gap-3 px-5 py-3"
@@ -202,6 +187,10 @@ function ExteriorView() {
           </p>
         </div>
 
+        <span className="text-[10px] font-medium" style={{ color: '#9aa0b8' }}>
+          Shift+Drag to orbit · Drag to pan · Scroll to zoom
+        </span>
+
         <button
           onClick={() => {
             setAnnotateMode(m => !m)
@@ -219,6 +208,16 @@ function ExteriorView() {
           <PenTool size={11} />
           {annotateMode ? 'Annotating…' : 'Annotate'}
         </button>
+
+        {annotations.length > 0 && (
+          <span
+            className="flex items-center gap-1 flex-shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold"
+            style={{ backgroundColor: '#e0f5f1', color: '#007a67' }}
+          >
+            <MessageSquare size={11} />
+            {annotations.length}
+          </span>
+        )}
 
         <span
           className="flex-shrink-0 rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-white"
@@ -238,11 +237,10 @@ function ExteriorView() {
             ref={map3dRef}
             mode={MapMode.SATELLITE}
             gestureHandling={GestureHandling.GREEDY}
-            defaultCenter={{ lat, lng, altitude: 1500 }}
-            defaultTilt={0}
-            defaultRange={2000}
+            defaultCenter={{ lat, lng, altitude: 100 }}
+            defaultTilt={45}
+            defaultRange={100}
             defaultHeading={0}
-            onSteadyChange={handleSteadyChange}
             onClick={handleMapClick}
             style={{ width: '100%', height: '100%' }}
           >
@@ -251,6 +249,8 @@ function ExteriorView() {
                 key={ann.id}
                 position={{ lat: ann.position.lat, lng: ann.position.lng, altitude: ann.position.altitude }}
                 altitudeMode={AltitudeMode.CLAMP_TO_GROUND}
+                drawsWhenOccluded
+                sizePreserved
                 title={ann.note}
                 onClick={() => {
                   setSelectedAnnotation(ann)
@@ -261,31 +261,13 @@ function ExteriorView() {
           </Map3D>
         </APIProvider>
 
-        {/* Controls hint */}
-        {!annotateMode && (
-          <div
-            className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full px-4 py-2 text-[10px] font-semibold"
-            style={{ background: 'rgba(0,0,0,0.45)', color: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(8px)' }}
-          >
-            Drag to orbit · Scroll to zoom · Alt+Drag to tilt
-          </div>
-        )}
+        {/* Annotate mode hint */}
         {annotateMode && (
           <div
             className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full px-4 py-2 text-[10px] font-semibold"
             style={{ background: 'rgba(0,158,133,0.85)', color: 'white', backdropFilter: 'blur(8px)' }}
           >
             Click on the map to place an annotation · Esc to exit
-          </div>
-        )}
-
-        {annotations.length > 0 && (
-          <div
-            className="pointer-events-none absolute bottom-4 left-4 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-semibold"
-            style={{ background: 'rgba(0,0,0,0.45)', color: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(8px)' }}
-          >
-            <MessageSquare size={11} />
-            {annotations.length} annotation{annotations.length !== 1 ? 's' : ''}
           </div>
         )}
 
@@ -446,6 +428,7 @@ function ExteriorView() {
           </div>
         )}
       </main>
+      </div>
     </div>
   )
 }
