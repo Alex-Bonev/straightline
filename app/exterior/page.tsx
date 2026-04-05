@@ -87,6 +87,55 @@ function ExteriorView() {
   const [editNote,           setEditNote]           = useState('')
   const [editLabel,          setEditLabel]          = useState<typeof LABEL_OPTIONS[number]>('accessible_entrance')
 
+  // ── Load annotations on mount ───────────────────────────────────────────────
+  useEffect(() => {
+    if (!scopedId || scopedId === 'ext_') return
+    fetch(`/api/annotations?placeId=${encodeURIComponent(scopedId)}`)
+      .then(r => r.json())
+      .then(d => setAnnotations(d.annotations ?? []))
+      .catch(() => {})
+  }, [scopedId])
+
+  // ── Annotation callbacks ─────────────────────────────────────────────────────
+  const saveAnnotation = useCallback(async () => {
+    if (!pendingPosition || !noteText.trim()) return
+    const res = await fetch('/api/annotations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        placeId: scopedId,
+        position: pendingPosition,
+        note: noteText.trim(),
+        label: selectedLabel,
+      }),
+    })
+    const data = await res.json()
+    if (data.annotation) setAnnotations(prev => [...prev, data.annotation])
+    setPendingPosition(null)
+    setNoteText('')
+  }, [pendingPosition, noteText, selectedLabel, scopedId])
+
+  const deleteAnnotation = useCallback(async (id: string) => {
+    await fetch(`/api/annotations?id=${id}`, { method: 'DELETE' })
+    setAnnotations(prev => prev.filter(a => a.id !== id))
+    setSelectedAnnotation(null)
+    setEditingAnnotation(false)
+  }, [])
+
+  const saveAnnotationEdit = useCallback(async () => {
+    if (!selectedAnnotation || !editNote.trim()) return
+    // PATCH only persists position; note/label are updated client-side only (matches interior viewer)
+    await fetch('/api/annotations', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: selectedAnnotation.id, note: editNote.trim(), label: editLabel }),
+    }).catch(() => {})
+    const updated = { ...selectedAnnotation, note: editNote.trim(), label: editLabel }
+    setAnnotations(prev => prev.map(a => a.id === selectedAnnotation.id ? updated : a))
+    setSelectedAnnotation(updated)
+    setEditingAnnotation(false)
+  }, [selectedAnnotation, editNote, editLabel])
+
   return (
     <div className={`${nunito.className} flex h-screen flex-col overflow-hidden bg-white`}>
       {/* ── Top bar ────────────────────────────────────────────────────── */}
