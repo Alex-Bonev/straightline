@@ -19,7 +19,6 @@ import {
   Layers,
   ChevronRight,
   Locate,
-  Box,
 } from 'lucide-react'
 import { GoogleMapView, type GoogleMapHandle, type MapPlace } from '@/components/map/google-map'
 import { PlacePanel } from '@/components/map/place-panel'
@@ -97,7 +96,7 @@ const SUGGESTED_PROMPTS = [
   'ADA compliant museums',
 ]
 
-function LocationCard({ place, selected, onClick, onView3D }: { place: Place; selected: boolean; onClick: () => void; onView3D: (place: Place) => void }) {
+function LocationCard({ place, selected, onClick, isEvaluated }: { place: Place; selected: boolean; onClick: () => void; isEvaluated: boolean }) {
   const photoUrl = place.photoRef
     ? `/api/places/photo?ref=${encodeURIComponent(place.photoRef)}&w=200`
     : null
@@ -132,20 +131,18 @@ function LocationCard({ place, selected, onClick, onView3D }: { place: Place; se
         </h3>
         <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium truncate" style={{ color: '#6b7a99' }}>
           <MapPin size={9} className="flex-shrink-0" />
-          <span className="truncate">{place.address}</span>
+          <span className="truncate">{place.address.replace('Franklin Antonio Hall, ', '')}</span>
         </p>
       </div>
 
-      {/* View in 3D button */}
-      <button
-        onClick={(e) => { e.stopPropagation(); onView3D(place) }}
-        className="absolute bottom-2 right-2 z-10 flex h-6 items-center gap-1 rounded-full px-2 text-[9px] font-bold transition-colors hover:bg-[#009E85] hover:text-white"
-        style={{ backgroundColor: '#e0f5f1', color: '#007a67' }}
-        title="View in 3D"
-      >
-        <Box size={10} />
-        3D
-      </button>
+      {isEvaluated && (
+        <div
+          className="absolute bottom-2 right-2 z-10 flex h-5 items-center rounded-full px-2 text-[9px] font-bold"
+          style={{ backgroundColor: '#e0f5f1', color: '#007a67' }}
+        >
+          Evaluated
+        </div>
+      )}
     </Card>
   )
 }
@@ -186,6 +183,14 @@ export default function MapPage() {
   const [splatModelUrl, setSplatModelUrl]     = useState<string | null>(null)
   const [showSplatViewer, setShowSplatViewer] = useState(false)
   const [showSplatPanel, setShowSplatPanel]   = useState(false)
+
+  const [evaluatedNames, setEvaluatedNames]   = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    supabase.from('locations').select('name').then(({ data }) => {
+      if (data) setEvaluatedNames(new Set(data.map((r: { name: string }) => r.name)))
+    })
+  }, [])
 
   useEffect(() => {
     scopeRef.current = createScope({ root: sidebarRef }).add(() => {
@@ -587,7 +592,7 @@ export default function MapPage() {
                         exit={{ opacity: 0, x: -12, scale: 0.97 }}
                         transition={{ duration: 0.32, ease: [0.25, 0.46, 0.45, 0.94] }}
                       >
-                        <LocationCard place={place} selected={selectedId === place.placeId} onClick={() => selectPlace(place)} onView3D={handleView3D} />
+                        <LocationCard place={place} selected={selectedId === place.placeId} onClick={() => selectPlace(place)} isEvaluated={evaluatedNames.has(place.name)} />
                       </motion.div>
                     ))}
                   </AnimatePresence>
@@ -631,6 +636,7 @@ export default function MapPage() {
         <SplatViewer
           modelUrl={splatModelUrl}
           placeId={selectedId ?? ''}
+          placeName={selectedPlace?.name}
           onClose={() => {
             setShowSplatViewer(false)
             setSplatModelUrl(null)

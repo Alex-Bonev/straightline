@@ -237,11 +237,25 @@ function ChecklistSkeleton() {
 
 // ── PlaceTitle: wrapping animated title ──────────────────────────────────────
 function PlaceTitle({ text }: { text: string }) {
+  const h1Ref = useRef<HTMLHeadingElement>(null)
+  const [textWidth, setTextWidth] = useState<number | null>(null)
+
+  useEffect(() => {
+    const el = h1Ref.current
+    if (!el) return
+    const observer = new ResizeObserver(entries => {
+      setTextWidth(entries[0].contentRect.width)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
   return (
     <div className="relative pb-4 w-fit max-w-full">
       <motion.h1
+        ref={h1Ref}
         className="font-black leading-snug text-left"
-        style={{ color: '#1a2035', fontSize: '36px', wordBreak: 'break-word' }}
+        style={{ color: '#1a2035', fontSize: text.length > 30 ? '32px' : '36px', wordBreak: 'break-word' }}
         initial={{ y: -16, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.55 }}
@@ -249,7 +263,8 @@ function PlaceTitle({ text }: { text: string }) {
         {text}
       </motion.h1>
       <motion.svg
-        width="100%" height="14" viewBox="0 0 300 14"
+        width={textWidth ?? '100%'} height="14" viewBox="0 0 300 14"
+        preserveAspectRatio="none"
         className="absolute bottom-0 left-0"
         style={{ color: '#009E85' }}
       >
@@ -513,9 +528,11 @@ export function PlacePanel({
           {/* Header */}
           <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-0">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: '#009E85' }}>
-                <Globe size={17} className="text-white" />
-              </div>
+              <img
+                src="/browseruse-icon.png"
+                alt="BrowserUse"
+                className="h-9 w-9 flex-shrink-0"
+              />
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-[19px] font-black leading-none tracking-tight" style={{ color: '#1a2035' }}>
@@ -631,34 +648,66 @@ export function PlacePanel({
           )}
         </div>
 
-        {/* ── 3 · Projective View ───────────────────────────── */}
+        {/* ── 3 · View Buttons ─────────────────────────────── */}
         <div className="pp-s px-5 py-4 opacity-0">
-          <div
-            className="relative overflow-hidden rounded-2xl cursor-pointer transition-transform duration-200 hover:scale-[1.015] active:scale-[0.99]"
-            style={{ height: 80, backgroundColor: '#050820' }}
-            role="button"
-            tabIndex={0}
-            aria-label="Enter Projective View"
-            onClick={onView3D}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') e.currentTarget.click() }}
-          >
-            <EtheralShadow
-              className="absolute inset-0"
-              color="rgba(26, 55, 210, 1)"
-              animation={{ scale: 88, speed: 75 }}
-              noise={{ opacity: 0.5, scale: 1.1 }}
-              sizing="fill"
-            />
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1">
-              <TextScramble
-                as="span"
-                trigger={scramble}
-                duration={0.9}
-                speed={0.033}
-                className="text-[15px] font-black tracking-tight text-white"
-              >
-                Enter Projective View
-              </TextScramble>
+          <div className="flex gap-3">
+            {/* Left: View Building Exterior */}
+            <div
+              className="relative flex-1 overflow-hidden rounded-2xl cursor-pointer transition-transform duration-200 hover:scale-[1.015] active:scale-[0.99]"
+              style={{ height: 80, backgroundColor: '#050820' }}
+              role="button"
+              tabIndex={0}
+              aria-label="View Building Exterior"
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') e.currentTarget.click() }}
+            >
+              <EtheralShadow
+                className="absolute inset-0"
+                color="rgba(0, 120, 100, 1)"
+                animation={{ scale: 88, speed: 60 }}
+                noise={{ opacity: 0.5, scale: 1.1 }}
+                sizing="fill"
+              />
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1">
+                <TextScramble
+                  as="span"
+                  trigger={scramble}
+                  duration={0.9}
+                  speed={0.033}
+                  className="text-[15px] font-black tracking-tight text-white text-center leading-tight"
+                >
+                  View Building Exterior
+                </TextScramble>
+              </div>
+            </div>
+
+            {/* Right: Enter Building Interior */}
+            <div
+              className="relative flex-1 overflow-hidden rounded-2xl cursor-pointer transition-transform duration-200 hover:scale-[1.015] active:scale-[0.99]"
+              style={{ height: 80, backgroundColor: '#050820' }}
+              role="button"
+              tabIndex={0}
+              aria-label="Enter Building Interior"
+              onClick={onView3D}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') e.currentTarget.click() }}
+            >
+              <EtheralShadow
+                className="absolute inset-0"
+                color="rgba(26, 55, 210, 1)"
+                animation={{ scale: 88, speed: 75 }}
+                noise={{ opacity: 0.5, scale: 1.1 }}
+                sizing="fill"
+              />
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1">
+                <TextScramble
+                  as="span"
+                  trigger={scramble}
+                  duration={1.1}
+                  speed={0.033}
+                  className="text-[15px] font-black tracking-tight text-white text-center leading-tight"
+                >
+                  Enter Building Interior
+                </TextScramble>
+              </div>
             </div>
           </div>
         </div>

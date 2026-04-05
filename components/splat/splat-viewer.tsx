@@ -1,8 +1,10 @@
 'use client'
 
 import React, { useEffect, useRef, useState, useCallback } from 'react'
-import { X, Loader2, PenTool, MessageSquare, Trash2, Tag, ArrowUpDown, TrendingUp } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { X, PenTool, MessageSquare, Trash2, Tag, ArrowUpDown, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Waves } from '@/components/ui/wave-background'
 
 interface Annotation {
   id: string
@@ -16,6 +18,7 @@ interface Annotation {
 interface SplatViewerProps {
   modelUrl: string
   placeId: string
+  placeName?: string
   onClose: () => void
 }
 
@@ -35,7 +38,7 @@ function LabelIcon({ label, size, className }: { label: string; size?: number; c
   return <TrendingUp size={size} className={className} />
 }
 
-export function SplatViewer({ modelUrl, placeId, onClose }: SplatViewerProps) {
+export function SplatViewer({ modelUrl, placeId, placeName, onClose }: SplatViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<any>(null)
   const threeRef = useRef<{ camera: any; renderer: any } | null>(null)
@@ -54,6 +57,7 @@ export function SplatViewer({ modelUrl, placeId, onClose }: SplatViewerProps) {
   const [editNote, setEditNote] = useState('')
   const [editLabel, setEditLabel] = useState('ramp')
   const [hoveredAnnotation, setHoveredAnnotation] = useState<string | null>(null)
+  const [showAnnotationList, setShowAnnotationList] = useState(false)
   const [screenPositions, setScreenPositions] = useState<Map<string, ScreenPos>>(new Map())
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [draggingAxis, setDraggingAxis] = useState<Axis | null>(null)
@@ -144,7 +148,17 @@ export function SplatViewer({ modelUrl, placeId, onClose }: SplatViewerProps) {
       disposed = true
       if (viewerRef.current) {
         try {
-          viewerRef.current.dispose()
+          // The library's async dispose() calls document.body.removeChild(rootElement),
+          // even when rootElement was provided externally and never appended to body.
+          // By the time this cleanup runs, React has already detached the component
+          // from the document, so we move rootElement to body first — giving dispose()
+          // a valid parent to removeChild from without throwing.
+          const el = viewerRef.current.rootElement as HTMLElement | null
+          if (el && el.parentElement !== document.body) {
+            el.style.display = 'none'
+            document.body.appendChild(el)
+          }
+          viewerRef.current.dispose().catch(() => {})
         } catch {}
         viewerRef.current = null
       }
@@ -354,6 +368,44 @@ export function SplatViewer({ modelUrl, placeId, onClose }: SplatViewerProps) {
     setEditingAnnotation(false)
   }, [selectedAnnotation, editNote, editLabel])
 
+  // Close annotation list when clicking outside — use 'click' not 'pointerdown'
+  // so the dropdown item's own click handler fires first
+  useEffect(() => {
+    if (!showAnnotationList) return
+    const close = () => setShowAnnotationList(false)
+    window.addEventListener('click', close)
+    return () => window.removeEventListener('click', close)
+  }, [showAnnotationList])
+
+  // Move camera to look at an annotation from a comfortable distance
+  const focusAnnotation = useCallback(async (ann: Annotation) => {
+    const t = threeRef.current
+    if (!t) return
+    const THREE_MOD = await import('three')
+    const { camera } = t
+    const viewer = viewerRef.current
+    const controls = viewer?.controls ?? viewer?.orbitControls ?? viewer?.perspectiveControls
+
+    const target = new THREE_MOD.Vector3(ann.position.x, ann.position.y, ann.position.z)
+    const dir = camera.position.clone().sub(target)
+    const dist = dir.length()
+
+    // Avoid normalizing a zero vector if camera is exactly at the annotation
+    if (dist > 0.001) dir.normalize()
+    else dir.set(0, 0, 1)
+
+    const newDist = Math.min(Math.max(dist, 0.5), 2.0)
+    camera.position.copy(target.clone().add(dir.multiplyScalar(newDist)))
+
+    if (controls) {
+      if (controls.target) controls.target.copy(target)
+      controls.update?.()
+    }
+
+    setShowAnnotationList(false)
+    setSelectedAnnotation(ann)
+  }, [])
+
   // Arrow key pan + Escape — captured before OrbitControls sees them
   useEffect(() => {
     const MOVE_SPEED = 0.15
@@ -420,60 +472,161 @@ export function SplatViewer({ modelUrl, placeId, onClose }: SplatViewerProps) {
         style={{ cursor: annotateMode ? 'crosshair' : 'default' }}
       />
 
-      {/* Loading overlay */}
-      {loading && !error && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80">
-          <Loader2 size={40} className="animate-spin text-white/70" />
-          <p className="mt-4 text-sm font-medium text-white/70">
-            Loading 3D scene... {progress > 0 ? `${progress}%` : ''}
-          </p>
-        </div>
-      )}
+      {/* Wave loading overlay — replaces both previous loading screens */}
+      <AnimatePresence>
+        {loading && !error && (
+          <motion.div
+            className="absolute inset-0 z-10"
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.9, ease: 'easeInOut' }}
+          >
+            <Waves backgroundColor="#f0faf8" strokeColor="rgba(0,158,133,0.18)" pointerSize={0.5} />
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+              <span
+                className="select-none text-[28px] font-extrabold tracking-tight"
+                style={{ color: '#006b58', letterSpacing: '-0.02em' }}
+              >
+                {progress > 0 ? `loading scene · ${progress}%` : 'loading 3D scene'}
+              </span>
+              <p
+                className="mt-2.5 select-none text-[11px] font-semibold uppercase tracking-[0.18em]"
+                style={{ color: 'rgba(26,58,107,0.4)' }}
+              >
+                please wait
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Error overlay */}
       {error && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80">
-          <p className="text-sm font-medium text-red-400">{error}</p>
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-white">
+          <p className="text-sm font-medium" style={{ color: '#d93025' }}>{error}</p>
           <Button
-            variant="outline"
             onClick={onClose}
-            className="mt-4 border-white/20 text-white hover:bg-white/10"
+            className="mt-4 rounded-full text-white"
+            style={{ backgroundColor: '#009E85' }}
           >
             Close
           </Button>
         </div>
       )}
 
-      {/* Close button */}
-      <Button
-        variant="outline"
-        size="icon"
-        onClick={onClose}
-        className="absolute right-4 top-4 z-10 rounded-full border-white/20 bg-black/40 text-white backdrop-blur-sm hover:bg-white/10"
-        aria-label="Close 3D viewer"
+      {/* Consolidated top bar */}
+      <div
+        className="absolute top-3 left-3 right-3 z-10 flex items-center gap-2 px-3 h-12 rounded-2xl bg-white"
+        style={{ border: '1px solid #eef0f4', boxShadow: '0 4px 24px rgba(0,158,133,0.10), 0 1px 6px rgba(0,0,0,0.06)' }}
       >
-        <X size={18} />
-      </Button>
-
-      {/* Annotate mode toggle */}
-      {!loading && !error && (
+        {/* Close */}
         <Button
-          variant="outline"
-          onClick={() => {
-            setAnnotateMode(!annotateMode)
-            setPendingPosition(null)
-            setSelectedAnnotation(null)
-          }}
-          className={`absolute left-4 top-4 z-10 rounded-full border-white/20 backdrop-blur-sm ${
-            annotateMode
-              ? 'bg-[#1a73e8] text-white hover:bg-[#1557b0]'
-              : 'bg-black/40 text-white hover:bg-white/10'
-          }`}
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          className="h-8 w-8 flex-shrink-0 rounded-full hover:bg-[#edfaf7]"
+          style={{ color: '#6b7a99' }}
+          aria-label="Close 3D viewer"
         >
-          <PenTool size={14} className="mr-2" />
-          {annotateMode ? 'Annotating...' : 'Annotate'}
+          <X size={16} />
         </Button>
-      )}
+
+        <div className="h-5 w-px flex-shrink-0" style={{ backgroundColor: '#e0ece9' }} />
+
+        {/* Annotate toggle — only after load */}
+        {!loading && !error && (
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setAnnotateMode(!annotateMode)
+              setPendingPosition(null)
+              setSelectedAnnotation(null)
+            }}
+            className="h-8 rounded-full px-3 text-xs font-semibold flex-shrink-0"
+            style={
+              annotateMode
+                ? { backgroundColor: '#009E85', color: '#fff', border: '1px solid #007a67' }
+                : { color: '#6b7a99', border: '1px solid #c8d8d4' }
+            }
+          >
+            <PenTool size={13} className="mr-1.5" />
+            {annotateMode ? 'Annotating…' : 'Annotate'}
+          </Button>
+        )}
+
+        {/* Annotation count — button that opens dropdown */}
+        {!loading && !error && annotations.length > 0 && (
+          <div className="relative flex-shrink-0">
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowAnnotationList(v => !v) }}
+              className="flex h-8 items-center gap-1.5 rounded-full px-3 text-[11px] font-semibold transition-colors hover:bg-[#c8f0e8]"
+              style={{ backgroundColor: '#e0f5f1', color: '#007a67', border: '1px solid #009E85' }}
+            >
+              <MessageSquare size={11} />
+              Visit Annotations
+            </button>
+
+            {showAnnotationList && (
+              <div
+                className="absolute left-0 top-[calc(100%+8px)] w-64 overflow-hidden rounded-xl bg-white/80 backdrop-blur-md"
+                style={{ border: '1px solid rgba(0,158,133,0.18)', boxShadow: '0 8px 28px rgba(0,0,0,0.12)' }}
+                onClick={e => e.stopPropagation()}
+              >
+                <p className="px-3 pt-3 pb-1.5 text-[9px] font-black uppercase tracking-[0.12em]" style={{ color: '#9aa0b8' }}>
+                  Annotations
+                </p>
+                <div className="max-h-56 overflow-y-auto pb-2">
+                  {annotations.map(ann => (
+                    <button
+                      key={ann.id}
+                      onClick={() => focusAnnotation(ann)}
+                      className="flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[#edfaf7]"
+                    >
+                      <span
+                        className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full"
+                        style={{ backgroundColor: '#009E85' }}
+                      >
+                        <LabelIcon label={ann.label} size={10} className="text-white" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-[11px] font-bold capitalize" style={{ color: '#1a2035' }}>
+                          {ann.label}
+                        </p>
+                        <p className="truncate text-[10px]" style={{ color: '#6b7a99' }}>
+                          {ann.note.length > 38 ? ann.note.slice(0, 38) + '…' : ann.note}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Spacer + place name */}
+        <div className="flex flex-1 items-center justify-center overflow-hidden px-2">
+          {!loading && !error && placeName && (
+            <span
+              className="truncate text-[13px] font-bold"
+              style={{ color: '#1a2035' }}
+            >
+              {placeName}
+            </span>
+          )}
+        </div>
+
+        {/* Controls hint — right side */}
+        {!loading && !error && !pendingPosition && (
+          <span
+            className="hidden select-none text-[11px] font-medium md:block"
+            style={{ color: '#9aa0b8' }}
+          >
+            {annotateMode
+              ? 'Click to place · Drag axis handles to reposition · Esc to exit'
+              : 'Drag to orbit · Scroll to zoom · Esc to close'}
+          </span>
+        )}
+      </div>
 
       {/* Annotation markers as HTML overlays */}
       {!loading &&
@@ -567,7 +720,7 @@ export function SplatViewer({ modelUrl, placeId, onClose }: SplatViewerProps) {
             ),
             top: Math.max(
               (screenPositions.get(selectedAnnotation.id)?.y ?? 200) - 40,
-              10
+              56
             ),
           }}
           onClick={(e) => e.stopPropagation()}
@@ -699,23 +852,6 @@ export function SplatViewer({ modelUrl, placeId, onClose }: SplatViewerProps) {
               Cancel
             </Button>
           </div>
-        </div>
-      )}
-
-      {/* Controls hint */}
-      {!loading && !error && !pendingPosition && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/40 px-4 py-2 text-xs font-medium text-white/50 backdrop-blur-sm">
-          {annotateMode
-            ? 'Click to place \u00b7 Drag axis handles to reposition \u00b7 Esc to exit'
-            : 'Drag to orbit \u00b7 Scroll to zoom \u00b7 Esc to close'}
-        </div>
-      )}
-
-      {/* Annotation count badge */}
-      {!loading && annotations.length > 0 && (
-        <div className="absolute left-4 bottom-4 z-10 rounded-full bg-black/40 px-3 py-1.5 text-xs font-medium text-white/60 backdrop-blur-sm">
-          <MessageSquare size={12} className="mr-1.5 inline" />
-          {annotations.length} annotation{annotations.length !== 1 ? 's' : ''}
         </div>
       )}
     </div>
