@@ -118,7 +118,7 @@ Gaussian Splat viewer that supports the SPZ container format.
 
   const zipName = `${slug}_accessibility_dataset_${exportedAt.slice(0, 10)}.zip`
 
-  return new Response(zipped, {
+  return new Response(zipped as unknown as BodyInit, {
     headers: {
       'Content-Type': 'application/zip',
       'Content-Disposition': `attachment; filename="${zipName}"`,
