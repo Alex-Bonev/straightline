@@ -10,8 +10,9 @@ import { BGPattern } from '@/components/ui/bg-pattern'
 import { TextScramble } from '@/components/ui/text-scramble'
 import {
   ChevronLeft, ChevronRight, MapPin,
-  Globe, X, Check, Minus, CircleHelp,
+  Globe, X, Check, Minus, CircleHelp, Eye,
 } from 'lucide-react'
+import { AgentModal } from './agent-modal'
 
 interface Place {
   placeId: string
@@ -308,6 +309,9 @@ export function PlacePanel({
 
   const [openInfoId, setOpenInfoId]               = useState<number | null>(null)
   const [adaTooltipVisible, setAdaTooltipVisible] = useState(false)
+  const [agentLiveUrls, setAgentLiveUrls]         = useState<{ type: string; url: string }[]>([])
+  const [showAgentModal, setShowAgentModal]       = useState(false)
+  const [textChecklistData, setTextChecklistData] = useState<{ id: number; status: string; sourceLabel: string | null; sourceQuote: string | null }[] | null>(null)
 
   // ── Fetch photos ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -331,6 +335,9 @@ export function PlacePanel({
     if (buPollRef.current) clearInterval(buPollRef.current)
     setOpenInfoId(null)
     setAdaTooltipVisible(false)
+    setAgentLiveUrls([])
+    setShowAgentModal(false)
+    setTextChecklistData(null)
 
     // Cancel any previously running session immediately, even if the last
     // effect's POST hadn't resolved yet (taskId would have been null in the
@@ -351,10 +358,10 @@ export function PlacePanel({
       fetch('/api/places/browseruse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: place.name, address: place.address }),
+        body: JSON.stringify({ name: place.name, address: place.address, placeId: place.placeId }),
       })
         .then(r => {
-          if (r.status === 429) throw new Error('rate_limited')
+          if (!r.ok) throw new Error(`POST failed: ${r.status}`)
           return r.json()
         })
         .then(data => {
@@ -365,31 +372,57 @@ export function PlacePanel({
           if (!data.taskId) { setBuStatus('error'); return }
           taskId = data.taskId
           buActiveTaskIdRef.current = data.taskId
+          if (Array.isArray(data.liveUrls) && data.liveUrls.length > 0) {
+            setAgentLiveUrls(data.liveUrls)
+          }
+
+          // Text checklist from API (pre-computed, passed through to GET for merge)
+          const textCl = data.textChecklist ?? ''
+          // Parse and store for modal display
+          if (textCl) {
+            try { setTextChecklistData(JSON.parse(decodeURIComponent(textCl))) } catch {}
+          }
+
+          // If text-only result (visual agent failed), resolve immediately
+          if (taskId === 'text-only' && textCl) {
+            fetch(`/api/places/browseruse?taskId=text-only&name=${encodeURIComponent(place.name)}&textChecklist=${textCl}`)
+              .then(r => r.json())
+              .then(poll => {
+                if (poll.status === 'done') { setBuInsights(poll.insights); setBuStatus('done') }
+                else setBuStatus('error')
+              })
+              .catch(() => setBuStatus('error'))
+            return
+          }
 
           buPollRef.current = setInterval(async () => {
             buPollCountRef.current += 1
-            if (buPollCountRef.current > 60) {
+            if (buPollCountRef.current > 90) {
               setBuStatus('error')
               clearInterval(buPollRef.current!)
               return
             }
             try {
-              const r    = await fetch(`/api/places/browseruse?taskId=${taskId}&name=${encodeURIComponent(place.name)}`)
+              const r    = await fetch(`/api/places/browseruse?taskId=${taskId}&name=${encodeURIComponent(place.name)}&textChecklist=${textCl}`)
               const poll = await r.json()
               if (poll.status === 'done') {
                 setBuInsights(poll.insights)
                 setBuStatus('done')
                 buActiveTaskIdRef.current = null
+                setAgentLiveUrls([])
+                setShowAgentModal(false)
                 clearInterval(buPollRef.current!)
               } else if (poll.status === 'error') {
                 setBuStatus('error')
                 buActiveTaskIdRef.current = null
+                setAgentLiveUrls([])
+                setShowAgentModal(false)
                 clearInterval(buPollRef.current!)
               }
             } catch {
               // network hiccup — keep polling
             }
-          }, 6000)
+          }, 2000)
         })
         .catch(() => { if (!cancelled) setBuStatus('error') })
     }, 50)
@@ -573,6 +606,31 @@ export function PlacePanel({
                     <span className="text-[11px] font-semibold" style={{ color: '#009E85' }}>
                       Scanning accessibility data…
                     </span>
+                    <button
+                      onClick={() => setShowAgentModal(true)}
+                      style={{
+                        marginLeft: 6,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontSize: 9,
+                        fontWeight: 800,
+                        letterSpacing: '0.08em',
+                        textTransform: 'uppercase',
+                        padding: '2px 8px',
+                        borderRadius: 4,
+                        background: 'rgba(0,158,133,0.1)',
+                        color: '#009E85',
+                        border: '1px solid rgba(0,158,133,0.25)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,158,133,0.2)' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0,158,133,0.1)' }}
+                    >
+                      <Eye size={10} />
+                      View agents
+                    </button>
                   </div>
                 )}
                 {buStatus === 'error' && (
@@ -716,6 +774,15 @@ export function PlacePanel({
         </div>
 
       </div>
+
+      {/* Agent modal */}
+      {showAgentModal && buStatus === 'loading' && (
+        <AgentModal
+          liveUrls={agentLiveUrls}
+          textChecklist={textChecklistData}
+          onClose={() => setShowAgentModal(false)}
+        />
+      )}
     </div>
   )
 }
