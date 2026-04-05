@@ -109,10 +109,12 @@ function ExteriorView() {
         label: selectedLabel,
       }),
     })
+    if (!res.ok) return
     const data = await res.json()
     if (data.annotation) setAnnotations(prev => [...prev, data.annotation])
     setPendingPosition(null)
     setNoteText('')
+    setSelectedLabel('accessible_entrance')
   }, [pendingPosition, noteText, selectedLabel, scopedId])
 
   const deleteAnnotation = useCallback(async (id: string) => {
