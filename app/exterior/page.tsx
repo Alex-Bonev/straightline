@@ -70,7 +70,7 @@ function ExteriorView() {
       >
         <button
           onClick={() => router.back()}
-          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-800 transition-colors hover:bg-[#d4f0ea]"
+          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] transition-colors hover:bg-[#d4f0ea]"
           style={{ backgroundColor: '#e0f5f1', color: '#007a67', fontWeight: 800 }}
           aria-label="Back to map"
         >
