@@ -383,26 +383,26 @@ function ExteriorView() {
             setPendingPosition(null)
             setSelectedAnnotation(null)
           }}
-          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black transition-colors"
+          className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-black transition-all"
           style={
             annotateMode
-              ? { backgroundColor: '#009E85', color: 'white' }
-              : { backgroundColor: '#e0f5f1', color: '#007a67' }
+              ? { backgroundColor: '#009E85', color: 'white', boxShadow: '0 2px 8px rgba(0,158,133,0.35)' }
+              : { backgroundColor: '#e0f5f1', color: '#007a67', border: '1.5px solid #009E85' }
           }
           aria-pressed={annotateMode}
         >
-          <PenTool size={11} />
+          <PenTool size={13} />
           {annotateMode ? 'Annotating…' : 'Annotate'}
         </button>
 
         <button
           onClick={startAutoAnnotate}
           disabled={autoStatus !== 'idle' && autoStatus !== 'done' && autoStatus !== 'error'}
-          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black transition-colors disabled:opacity-60"
-          style={{ backgroundColor: '#e0f5f1', color: '#007a67' }}
+          className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-black transition-all disabled:opacity-60"
+          style={{ backgroundColor: '#e0f5f1', color: '#007a67', border: '1.5px solid #009E85' }}
           title="Automatically detect and annotate entrances, ramps, and stairs using AI"
         >
-          <Wand2 size={11} className={autoStatus === 'street_view' || autoStatus === 'analyzing' ? 'animate-pulse' : ''} />
+          <Wand2 size={13} className={autoStatus === 'street_view' || autoStatus === 'analyzing' ? 'animate-pulse' : ''} />
           {autoStatus === 'street_view' && 'Scanning Street View…'}
           {autoStatus === 'analyzing' && 'Analyzing images…'}
           {autoStatus !== 'street_view' && autoStatus !== 'analyzing' && 'Auto-Annotate'}
@@ -412,10 +412,10 @@ function ExteriorView() {
           <div className="relative flex-shrink-0">
             <button
               onClick={(e) => { e.stopPropagation(); setShowAnnotationList(v => !v) }}
-              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black transition-colors hover:bg-[#c8f0e8]"
-              style={{ backgroundColor: '#e0f5f1', color: '#007a67', border: '1px solid #009E85' }}
+              className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-black transition-all hover:bg-[#c8f0e8]"
+              style={{ backgroundColor: '#e0f5f1', color: '#007a67', border: '1.5px solid #009E85' }}
             >
-              <MessageSquare size={11} />
+              <MessageSquare size={13} />
               Visit Annotations
             </button>
 
@@ -738,8 +738,8 @@ function ExteriorView() {
                 </p>
                 <button
                   onClick={() => { setSelectedAnnotation(null); setEditingAnnotation(false) }}
-                  className="mt-2 text-[10px] font-semibold transition-colors hover:opacity-70"
-                  style={{ color: '#9aa0b8' }}
+                  className="mt-3 w-full rounded-full py-1.5 text-[11px] font-bold transition-all hover:bg-[#f0f3fa]"
+                  style={{ color: '#6b7a99', border: '1.5px solid #d0d5e0' }}
                 >
                   Dismiss
                 </button>

@@ -571,14 +571,14 @@ export function SplatViewer({ modelUrl, placeId, placeName, flipped, onClose }: 
               setPendingPosition(null)
               setSelectedAnnotation(null)
             }}
-            className="h-8 rounded-full px-3 text-xs font-semibold flex-shrink-0"
+            className="h-9 rounded-full px-4 text-[12px] font-bold flex-shrink-0"
             style={
               annotateMode
-                ? { backgroundColor: '#009E85', color: '#fff', border: '1px solid #007a67' }
-                : { color: '#6b7a99', border: '1px solid #c8d8d4' }
+                ? { backgroundColor: '#009E85', color: '#fff', border: '1.5px solid #007a67', boxShadow: '0 2px 8px rgba(0,158,133,0.35)' }
+                : { color: '#007a67', backgroundColor: '#e0f5f1', border: '1.5px solid #009E85' }
             }
           >
-            <PenTool size={13} className="mr-1.5" />
+            <PenTool size={14} className="mr-1.5" />
             {annotateMode ? 'Annotating…' : 'Annotate'}
           </Button>
         )}
@@ -588,10 +588,10 @@ export function SplatViewer({ modelUrl, placeId, placeName, flipped, onClose }: 
           <div className="relative flex-shrink-0">
             <button
               onClick={(e) => { e.stopPropagation(); setShowAnnotationList(v => !v) }}
-              className="flex h-8 items-center gap-1.5 rounded-full px-3 text-[11px] font-semibold transition-colors hover:bg-[#c8f0e8]"
-              style={{ backgroundColor: '#e0f5f1', color: '#007a67', border: '1px solid #009E85' }}
+              className="flex h-9 items-center gap-1.5 rounded-full px-4 text-[12px] font-bold transition-all hover:bg-[#c8f0e8]"
+              style={{ backgroundColor: '#e0f5f1', color: '#007a67', border: '1.5px solid #009E85' }}
             >
-              <MessageSquare size={11} />
+              <MessageSquare size={13} />
               Visit Annotations
             </button>
 
@@ -639,11 +639,11 @@ export function SplatViewer({ modelUrl, placeId, placeName, flipped, onClose }: 
             variant="ghost"
             onClick={downloadDataset}
             disabled={downloading}
-            className="h-8 rounded-full px-3 text-xs font-semibold flex-shrink-0"
-            style={{ color: '#6b7a99', border: '1px solid #c8d8d4', opacity: downloading ? 0.6 : 1 }}
+            className="h-9 rounded-full px-4 text-[12px] font-bold flex-shrink-0"
+            style={{ color: '#007a67', backgroundColor: '#e0f5f1', border: '1.5px solid #009E85', opacity: downloading ? 0.6 : 1 }}
             title="Download model + annotations as a research dataset"
           >
-            <Download size={13} className="mr-1.5" />
+            <Download size={14} className="mr-1.5" />
             {downloading ? 'Exporting…' : 'Export Dataset'}
           </Button>
         )}
@@ -841,7 +841,7 @@ export function SplatViewer({ modelUrl, placeId, placeName, flipped, onClose }: 
               </p>
               <button
                 onClick={() => { setSelectedAnnotation(null); setEditingAnnotation(false) }}
-                className="mt-2 text-[11px] font-medium text-white/40 transition-colors hover:text-white/70"
+                className="mt-3 w-full rounded-full border border-white/30 py-1.5 text-[11px] font-bold text-white/70 transition-all hover:border-white/50 hover:bg-white/10 hover:text-white"
               >
                 Dismiss
               </button>

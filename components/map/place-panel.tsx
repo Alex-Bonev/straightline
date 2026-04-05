@@ -100,7 +100,7 @@ function ChecklistRow({
       <div style={{
         background: 'white',
         borderRadius: 8,
-        padding: '6px 9px 6px 6px',
+        padding: '7px 9px 7px 6px',
         display: 'flex',
         alignItems: 'center',
         gap: 7,
@@ -222,7 +222,7 @@ function ChecklistRow({
 function ChecklistSkeleton() {
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 7, padding: '6px 9px 6px 6px',
+      display: 'flex', alignItems: 'center', gap: 7, padding: '7px 9px 7px 6px',
       borderRadius: 8, background: 'white',
       border: '1px solid rgba(0,0,0,0.06)',
       boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
@@ -697,7 +697,7 @@ export function PlacePanel({
           ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 10px', padding: '14px 20px 16px' }}>
             {/* Column 1: items 1–5 */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
               {buStatus === 'loading'
                 ? Array.from({ length: 5 }).map((_, i) => <ChecklistSkeleton key={i} />)
                 : (buInsights?.checklist ?? []).slice(0, 5).map(item => (
@@ -712,7 +712,7 @@ export function PlacePanel({
               }
             </div>
             {/* Column 2: items 6–10 */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
               {buStatus === 'loading'
                 ? Array.from({ length: 5 }).map((_, i) => <ChecklistSkeleton key={i} />)
                 : (buInsights?.checklist ?? []).slice(5, 10).map(item => (
