@@ -4,16 +4,15 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const placeId = searchParams.get('placeId')
 
-  let query = supabase
-    .from('annotations')
-    .select('id, place_id, position, note, label, created_at')
-    .order('created_at', { ascending: true })
-
-  if (placeId) {
-    query = query.eq('place_id', placeId)
+  if (!placeId) {
+    return Response.json({ annotations: [] })
   }
 
-  const { data, error } = await query
+  const { data, error } = await supabase
+    .from('annotations')
+    .select('id, place_id, position, note, label, created_at')
+    .eq('place_id', placeId)
+    .order('created_at', { ascending: true })
 
   if (error) {
     return Response.json({ error: error.message }, { status: 500 })
