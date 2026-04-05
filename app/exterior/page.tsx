@@ -110,6 +110,8 @@ function ExteriorView() {
   const [autoTaskId, setAutoTaskId] = useState<string | null>(null)
   const [autoError,  setAutoError]  = useState<string | null>(null)
   const [autoSummary, setAutoSummary] = useState<string | null>(null)
+  const [autoLog,    setAutoLog]    = useState<string[]>([])
+  const [autoScreenshot, setAutoScreenshot] = useState<string | null>(null)
 
   const handleMapClick = useCallback((e: Map3DClickEvent) => {
     if (!annotateMode) return
@@ -236,12 +238,17 @@ function ExteriorView() {
 
         if (data.status === 'loading') {
           setAutoStatus(data.step === 'street_view' ? 'street_view' : 'analyzing')
+          if (data.visitedUrls?.length) setAutoLog(data.visitedUrls)
+          if (data.latestScreenshot) setAutoScreenshot(data.latestScreenshot)
           return
         }
 
         if (data.status === 'done') {
           clearInterval(interval)
           const newAnns = data.annotations ?? []
+          console.log('[auto-annotate] Pipeline complete. Annotations:', newAnns)
+          setAutoLog([])
+          setAutoScreenshot(null)
           if (newAnns.length > 0) {
             setAnnotations(prev => {
               const existingIds = new Set(prev.map(a => a.id))
@@ -265,6 +272,9 @@ function ExteriorView() {
 
         if (data.status === 'error') {
           clearInterval(interval)
+          console.error('[auto-annotate] Pipeline error:', data.message)
+          setAutoLog([])
+          setAutoScreenshot(null)
           setAutoError(data.message ?? 'Auto-annotation failed')
           setAutoStatus('error')
           setAutoTaskId(null)
@@ -288,6 +298,8 @@ function ExteriorView() {
     setAutoStatus('street_view')
     setAutoError(null)
     setAutoSummary(null)
+    setAutoLog([])
+    setAutoScreenshot(null)
 
     try {
       const res = await fetch('/api/annotations/auto', {
@@ -521,6 +533,58 @@ function ExteriorView() {
             }}
           >
             {autoError ?? autoSummary}
+          </div>
+        )}
+
+        {/* BrowserUse agent activity panel */}
+        {(autoStatus === 'street_view' || autoStatus === 'analyzing') && (
+          <div
+            className="absolute right-4 top-4 z-30 w-80 overflow-hidden rounded-2xl"
+            style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.1)' }}
+          >
+            {/* Header */}
+            <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+              </span>
+              <span className="text-[11px] font-bold text-white/90">
+                {autoStatus === 'street_view' ? 'Agent: Navigating Street View' : 'Agent: Analyzing Images'}
+              </span>
+            </div>
+
+            {/* Screenshot preview */}
+            {autoScreenshot && (
+              <div className="px-3 pt-3">
+                <img
+                  src={`data:image/png;base64,${autoScreenshot}`}
+                  alt="Agent view"
+                  className="w-full rounded-lg"
+                  style={{ border: '1px solid rgba(255,255,255,0.1)', maxHeight: 160, objectFit: 'cover' }}
+                />
+              </div>
+            )}
+
+            {/* Visited URLs log */}
+            <div className="px-3 py-3">
+              <p className="mb-1.5 text-[9px] font-black uppercase tracking-[0.1em] text-white/40">
+                Pages visited
+              </p>
+              <div className="max-h-28 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                {autoLog.length === 0 ? (
+                  <p className="text-[10px] text-white/30 italic">Waiting for agent to start browsing...</p>
+                ) : (
+                  autoLog.map((url, i) => (
+                    <div key={i} className="flex items-start gap-1.5 py-0.5">
+                      <span className="mt-[3px] h-1 w-1 flex-shrink-0 rounded-full bg-white/30" />
+                      <p className="break-all text-[10px] leading-tight text-white/60">
+                        {url.length > 80 ? url.slice(0, 80) + '…' : url}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         )}
 

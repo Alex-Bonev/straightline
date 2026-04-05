@@ -62,11 +62,13 @@ const STREET_VIEW_HALF_FOV_DEG = 45
 // Most Street View captures are taken from the road, ~10-15m from building facades.
 const FEATURE_PROJECTION_DISTANCE_M = 12
 
+// BrowserUse response shape varies — use loose typing and extract screenshots defensively
 interface BrowserUseSession {
   status: string
   output?: string | object
-  steps?: { screenshot?: string; actions?: { url?: string }[] }[]
-  actions?: { screenshot?: string; url?: string }[]
+  steps?: Record<string, any>[]
+  actions?: Record<string, any>[]
+  [key: string]: any
 }
 
 // ── POST /api/annotations/auto ───────────────────────────────────────────────
@@ -212,7 +214,30 @@ export async function GET(request: NextRequest) {
 
   const running = buData.status === 'created' || buData.status === 'running'
   if (running) {
-    return Response.json({ status: 'loading', step: 'street_view' })
+    // Extract visited URLs and latest screenshot for the live activity panel
+    const visitedUrls: string[] = []
+    let latestScreenshot: string | null = null
+
+    function extractFromObj(obj: any, depth = 0): void {
+      if (!obj || depth > 4) return
+      if (Array.isArray(obj)) { for (const item of obj) extractFromObj(item, depth + 1); return }
+      if (typeof obj !== 'object') return
+      for (const [key, val] of Object.entries(obj)) {
+        if (key === 'url' && typeof val === 'string' && val.length > 0) visitedUrls.push(val)
+        if (key === 'screenshot' && typeof val === 'string' && val.length > 100) latestScreenshot = val
+        if (typeof val === 'object' && val !== null) extractFromObj(val, depth + 1)
+      }
+    }
+
+    extractFromObj(buData.steps)
+    extractFromObj(buData.actions)
+
+    return Response.json({
+      status: 'loading',
+      step: 'street_view',
+      visitedUrls,
+      latestScreenshot,
+    })
   }
 
   if (buData.status === 'timed_out' || buData.status === 'error' || !buData.output) {
@@ -244,39 +269,87 @@ export async function GET(request: NextRequest) {
 
   console.log('[auto-annotate] Parsed headings:', headings, 'Camera:', camLat, camLng)
 
-  // ── Extract screenshots from BrowserUse steps and actions ─────────────────
-  // BrowserUse may store screenshots at the step level or the action level.
-  // Heading-to-screenshot pairing assumes screenshots appear in the same order
-  // as the headings in the text output.
-  const screenshots: { base64: string; heading: number }[] = []
-  const steps = buData.steps ?? []
-  let headingIdx = 0
-  for (const step of steps) {
-    if (step.screenshot && headingIdx < headings.length) {
-      screenshots.push({
-        base64: step.screenshot,
-        heading: headings[headingIdx],
-      })
-      headingIdx++
+  // ── Extract screenshots from BrowserUse response ─────────────────────────
+  // BrowserUse stores screenshots in various places depending on the API version.
+  // We recursively collect all base64 screenshot strings from the response.
+  const allScreenshots: string[] = []
+
+  function collectScreenshots(obj: any, depth = 0): void {
+    if (!obj || depth > 5) return
+    if (Array.isArray(obj)) {
+      for (const item of obj) collectScreenshots(item, depth + 1)
+      return
     }
-  }
-  // Also check action-level screenshots if steps didn't have enough
-  if (screenshots.length < headings.length) {
-    const actions = buData.actions ?? []
-    for (const action of actions) {
-      if (action.screenshot && headingIdx < headings.length) {
-        screenshots.push({
-          base64: action.screenshot,
-          heading: headings[headingIdx],
-        })
-        headingIdx++
+    if (typeof obj === 'object') {
+      for (const [key, val] of Object.entries(obj)) {
+        if (key === 'screenshot' && typeof val === 'string' && val.length > 100) {
+          allScreenshots.push(val)
+        } else if (typeof val === 'object' && val !== null) {
+          collectScreenshots(val, depth + 1)
+        }
       }
     }
   }
 
+  // Log the response shape for debugging
+  const topKeys = Object.keys(buData).filter(k => k !== 'output')
+  const stepsCount = buData.steps?.length ?? 0
+  const actionsCount = buData.actions?.length ?? 0
+  console.log('[auto-annotate] Response shape:', topKeys, '| steps:', stepsCount, '| actions:', actionsCount)
+  if (stepsCount > 0) {
+    const sampleStep = buData.steps![0]
+    console.log('[auto-annotate] Sample step keys:', Object.keys(sampleStep))
+  }
+
+  collectScreenshots(buData.steps)
+  collectScreenshots(buData.actions)
+
+  console.log('[auto-annotate] Found', allScreenshots.length, 'screenshots total')
+
+  // Pair screenshots with headings
+  const screenshots: { base64: string; heading: number }[] = []
+  for (let i = 0; i < allScreenshots.length && i < headings.length; i++) {
+    screenshots.push({ base64: allScreenshots[i], heading: headings[i] })
+  }
+
+  // If we have screenshots but no parsed headings matched, use all screenshots with default headings
+  if (screenshots.length === 0 && allScreenshots.length > 0) {
+    const defaultHeadings = [0, 90, 180, 270]
+    for (let i = 0; i < allScreenshots.length && i < defaultHeadings.length; i++) {
+      screenshots.push({ base64: allScreenshots[i], heading: defaultHeadings[i] })
+    }
+  }
+
+  // If no screenshots from BrowserUse, fall back to Google Street View Static API.
+  // We have camera position + headings from the agent's output, so we can fetch clean
+  // Street View images directly — these are actually better (no browser chrome).
   if (screenshots.length === 0) {
-    console.error('[auto-annotate] No screenshots found in BrowserUse output')
-    return Response.json({ status: 'error', message: 'BrowserUse captured no screenshots' })
+    const mapsKey = process.env.NEXT_PUBLIC_MAPS_KEY
+    if (!mapsKey) {
+      console.error('[auto-annotate] No screenshots from BrowserUse and no MAPS_KEY for Static API fallback')
+      return Response.json({ status: 'error', message: 'BrowserUse captured no screenshots and Street View Static API is not configured' })
+    }
+
+    console.log('[auto-annotate] No screenshots in BrowserUse response — falling back to Street View Static API')
+    for (const heading of headings) {
+      try {
+        const svUrl = `https://maps.googleapis.com/maps/api/streetview?size=640x480&location=${camLat},${camLng}&heading=${heading}&pitch=0&fov=90&key=${mapsKey}`
+        const imgRes = await fetch(svUrl)
+        if (!imgRes.ok) {
+          console.warn('[auto-annotate] Street View Static fetch failed for heading', heading, imgRes.status)
+          continue
+        }
+        const buf = await imgRes.arrayBuffer()
+        const base64 = Buffer.from(buf).toString('base64')
+        screenshots.push({ base64, heading })
+      } catch (e) {
+        console.warn('[auto-annotate] Street View Static fetch error for heading', heading, e)
+      }
+    }
+
+    if (screenshots.length === 0) {
+      return Response.json({ status: 'error', message: 'Could not fetch Street View images for this location' })
+    }
   }
 
   console.log('[auto-annotate] Processing', screenshots.length, 'screenshots')
@@ -320,7 +393,7 @@ export async function GET(request: NextRequest) {
                 type: 'image',
                 source: {
                   type: 'base64',
-                  media_type: 'image/png',
+                  media_type: 'image/jpeg',
                   data: shot.base64,
                 },
               },
