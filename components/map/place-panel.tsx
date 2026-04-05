@@ -335,13 +335,13 @@ export function PlacePanel({
 
           buPollRef.current = setInterval(async () => {
             buPollCountRef.current += 1
-            if (buPollCountRef.current > 30) {
+            if (buPollCountRef.current > 60) {
               setBuStatus('error')
               clearInterval(buPollRef.current!)
               return
             }
             try {
-              const r    = await fetch(`/api/places/browseruse?taskId=${taskId}`)
+              const r    = await fetch(`/api/places/browseruse?taskId=${taskId}&name=${encodeURIComponent(place.name)}`)
               const poll = await r.json()
               if (poll.status === 'done') {
                 setBuInsights(poll.insights)
@@ -523,6 +523,13 @@ export function PlacePanel({
                     </span>
                   </div>
                 )}
+                {buStatus === 'error' && (
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-[11px] font-semibold" style={{ color: '#d93025' }}>
+                      Scan unavailable
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -530,6 +537,8 @@ export function PlacePanel({
             <div className="flex-shrink-0 text-right">
               {buStatus === 'loading' ? (
                 <Skeleton className="h-7 w-16 rounded-lg" />
+              ) : buStatus === 'error' ? (
+                <span className="text-[11px] font-semibold" style={{ color: '#d93025' }}>Scan failed</span>
               ) : (
                 <div>
                   <span className="text-[28px] font-black leading-none tracking-tight" style={{ color: '#1a2035' }}>
@@ -547,6 +556,13 @@ export function PlacePanel({
           </div>
 
           {/* Checklist grid — 2 columns of 5 */}
+          {buStatus === 'error' ? (
+            <div style={{ padding: '12px 20px 16px' }}>
+              <p className="text-[12px] font-medium" style={{ color: '#d93025' }}>
+                Could not retrieve accessibility data for this location. This may be because BrowserUse timed out or could not find sufficient information. Try selecting the location again.
+              </p>
+            </div>
+          ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 10px', padding: '14px 20px 16px' }}>
             {/* Column 1: items 1–5 */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -577,6 +593,7 @@ export function PlacePanel({
               }
             </div>
           </div>
+          )}
         </div>
 
         {/* ── 3 · Projective View ───────────────────────────── */}
