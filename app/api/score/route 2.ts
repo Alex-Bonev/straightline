@@ -11,8 +11,12 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'detail required' }, { status: 400 })
   }
 
-  const reviewsText = detail.reviews.length > 0
-    ? detail.reviews.map((r: any, i: number) =>
+  if (!process.env.CLAUDE_KEY) {
+    return Response.json({ error: 'CLAUDE_KEY not set' }, { status: 500 })
+  }
+
+  const reviewsText = detail.reviews?.length > 0
+    ? detail.reviews.map((r: { rating: number; relativeTime: string; text: string }, i: number) =>
         `Review ${i + 1} (${r.rating}/5 stars, ${r.relativeTime}): ${r.text}`
       ).join('\n\n')
     : 'No reviews available.'
@@ -41,19 +45,41 @@ Grade scale: A+ (exceptional), A (excellent), A- (very good), B+ (good), B (dece
 Tags must only be from: Wheelchair, Elevator, ADA, Parking, Ramp, RestRoom, Braille, HearingLoop, StepFree.
 Include only tags that are explicitly mentioned or strongly implied. Return 0-4 tags.`
 
-  const message = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 256,
-    messages: [{ role: 'user', content: prompt }],
-  })
+  try {
+    const message = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 256,
+      messages: [{ role: 'user', content: prompt }],
+    })
 
-  const text = (message.content[0] as { type: string; text: string }).text.trim()
+    const text = (message.content[0] as { type: string; text: string }).text.trim()
+    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      return Response.json({ error: 'Failed to parse score' }, { status: 502 })
+    }
 
-  const jsonMatch = text.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) {
-    return Response.json({ error: 'Failed to parse score' }, { status: 502 })
+    const score = JSON.parse(jsonMatch[0])
+    return Response.json({ score })
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('[score] Claude error:', msg)
+
+    // Derive a basic score from Google data so the UI still shows something
+    const rating: number = detail.rating ?? 3
+    const wheelchair = detail.wheelchairAccessibleEntrance
+    let grade = 'C'
+    if (wheelchair === true)       grade = rating >= 4.5 ? 'A' : rating >= 4 ? 'B+' : 'B'
+    else if (wheelchair === false)  grade = rating >= 4 ? 'C+' : 'C-'
+    else                            grade = rating >= 4.5 ? 'B+' : rating >= 4 ? 'B' : 'C'
+
+    const tags: string[] = []
+    if (wheelchair === true) tags.push('Wheelchair')
+
+    const score = {
+      grade,
+      tags,
+      summary: `Estimated from Google rating ${rating}/5. Add Anthropic credits for full AI analysis.`,
+    }
+    return Response.json({ score })
   }
-
-  const score = JSON.parse(jsonMatch[0])
-  return Response.json({ score })
 }
