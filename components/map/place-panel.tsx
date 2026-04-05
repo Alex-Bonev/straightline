@@ -143,7 +143,7 @@ function ChecklistRow({
         borderRadius: '0 0 8px 8px',
         maxHeight: isOpen ? 600 : 0,
         overflow: isOpen ? 'auto' : 'hidden',
-        transition: 'max-height 0.28s ease, padding 0.28s ease, border-color 0.15s ease',
+        transition: 'max-height 0.5s cubic-bezier(0.16, 1, 0.3, 1), padding 0.5s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease',
         padding: isOpen ? '11px 9px 10px' : '0 9px',
         marginTop: -4,
         position: 'relative',
