@@ -285,10 +285,12 @@ export function PlacePanel({
   place,
   onClose,
   onView3D,
+  onViewExterior,
 }: {
   place: Place
   onClose: () => void
   onView3D?: () => void
+  onViewExterior?: () => void
 }) {
   const wrapperRef                = useRef<HTMLDivElement>(null)
   const [photoUrls, setPhotoUrls] = useState<string[]>([])
@@ -658,6 +660,7 @@ export function PlacePanel({
               role="button"
               tabIndex={0}
               aria-label="View Building Exterior"
+              onClick={onViewExterior}
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') e.currentTarget.click() }}
             >
               <EtheralShadow
