@@ -179,7 +179,7 @@ function ChecklistRow({
               }}>
                 &ldquo;{item.sourceQuote}&rdquo;
               </div>
-              <div style={{ fontSize: 10, color: '#6b7a99' }}>
+              <div style={{ fontSize: 10, color: '#6b7a99', textAlign: 'right' }}>
                 —{' '}
                 {item.sourceUrl ? (
                   <a
