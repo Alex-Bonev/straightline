@@ -77,6 +77,16 @@ const MapInner = forwardRef<GoogleMapHandle, Props>(function MapInner(
     },
   }), [map])
 
+  // Disable all native controls we don't use
+  useEffect(() => {
+    if (!map) return
+    map.setOptions({
+      mapTypeControl: false,
+      rotateControl: false,
+      scaleControl: false,
+    })
+  }, [map])
+
   // Fire onReady once the map instance is available (tiles loaded)
   useEffect(() => {
     if (!map) return
