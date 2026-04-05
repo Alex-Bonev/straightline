@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { X, PenTool, MessageSquare, Trash2, Tag, ArrowUpDown, TrendingUp } from 'lucide-react'
+import { X, PenTool, MessageSquare, Trash2, Tag, ArrowUpDown, TrendingUp, DoorOpen, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Waves } from '@/components/ui/wave-background'
 
@@ -19,10 +19,11 @@ interface SplatViewerProps {
   modelUrl: string
   placeId: string
   placeName?: string
+  flipped?: boolean
   onClose: () => void
 }
 
-const LABEL_OPTIONS = ['ramp', 'elevator']
+const LABEL_OPTIONS = ['ramp', 'elevator', 'door']
 const GIZMO_SCALE = 0.5 // world units for axis handle length
 const AXIS_COLORS = { x: '#ef4444', y: '#22c55e', z: '#3b82f6' } as const
 type Axis = 'x' | 'y' | 'z'
@@ -35,10 +36,11 @@ interface ScreenPos {
 
 function LabelIcon({ label, size, className }: { label: string; size?: number; className?: string }) {
   if (label === 'elevator') return <ArrowUpDown size={size} className={className} />
+  if (label === 'door') return <DoorOpen size={size} className={className} />
   return <TrendingUp size={size} className={className} />
 }
 
-export function SplatViewer({ modelUrl, placeId, placeName, onClose }: SplatViewerProps) {
+export function SplatViewer({ modelUrl, placeId, placeName, flipped, onClose }: SplatViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<any>(null)
   const threeRef = useRef<{ camera: any; renderer: any } | null>(null)
@@ -46,6 +48,7 @@ export function SplatViewer({ modelUrl, placeId, placeName, onClose }: SplatView
   const [loading, setLoading] = useState(true)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [downloading, setDownloading] = useState(false)
 
   const [annotateMode, setAnnotateMode] = useState(false)
   const [annotations, setAnnotations] = useState<Annotation[]>([])
@@ -67,6 +70,8 @@ export function SplatViewer({ modelUrl, placeId, placeName, onClose }: SplatView
     screenDir: { x: number; y: number }
     screenLen: number
   } | null>(null)
+  const justDraggedRef = useRef(false)
+  const annotationClickedRef = useRef(false)
 
   // Load existing annotations
   useEffect(() => {
@@ -85,14 +90,13 @@ export function SplatViewer({ modelUrl, placeId, placeName, onClose }: SplatView
     async function init() {
       try {
         const GaussianSplats3D = await import('@mkkellogg/gaussian-splats-3d')
-        const THREE = await import('three')
 
         if (disposed) return
 
         const viewer = new GaussianSplats3D.Viewer({
-          cameraUp: [0, 1, 0],
-          initialCameraPosition: [0, 0.5, 0.5],
-          initialCameraLookAt: [0, 0.5, -1],
+          cameraUp: flipped ? [0, -1, 0] : [0, 1, 0],
+          initialCameraPosition: flipped ? [0, -0.5, 0.5] : [0, 0.5, 0.5],
+          initialCameraLookAt: flipped ? [0, -0.5, -1] : [0, 0.5, -1],
           selfDrivenMode: true,
           useBuiltInControls: true,
           rootElement: containerRef.current!,
@@ -102,7 +106,6 @@ export function SplatViewer({ modelUrl, placeId, placeName, onClose }: SplatView
         viewerRef.current = viewer
 
         // Access the Three.js internals for annotation projection
-        const threeScene = (viewer as any).threeScene ?? (viewer as any).scene
         const camera = (viewer as any).camera ?? (viewer as any).perspectiveCamera
         const renderer = (viewer as any).renderer
 
@@ -248,7 +251,7 @@ export function SplatViewer({ modelUrl, placeId, placeName, onClose }: SplatView
   // Handle click to place annotation
   const handleCanvasClick = useCallback(
     async (e: React.MouseEvent<HTMLDivElement>) => {
-      if (draggingId) return
+      if (draggingId || justDraggedRef.current || annotationClickedRef.current) return
       if (!annotateMode || !threeRef.current) return
 
       const pos = await getPositionFromClick(e.clientX, e.clientY)
@@ -314,6 +317,8 @@ export function SplatViewer({ modelUrl, placeId, placeName, onClose }: SplatView
           body: JSON.stringify({ id: ann.id, position: ann.position }),
         })
       }
+      justDraggedRef.current = true
+      setTimeout(() => { justDraggedRef.current = false }, 50)
       setDraggingId(null)
       setDraggingAxis(null)
       dragStartRef.current = null
@@ -367,6 +372,31 @@ export function SplatViewer({ modelUrl, placeId, placeName, onClose }: SplatView
     setSelectedAnnotation(updated)
     setEditingAnnotation(false)
   }, [selectedAnnotation, editNote, editLabel])
+
+  const downloadDataset = useCallback(async () => {
+    if (downloading) return
+    setDownloading(true)
+    try {
+      const params = new URLSearchParams({
+        placeId,
+        placeName: placeName ?? '',
+        modelUrl,
+      })
+      const res = await fetch(`/api/export/dataset?${params}`)
+      if (!res.ok) throw new Error('Export failed')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = res.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] ?? 'dataset.zip'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error('[export]', e)
+    } finally {
+      setDownloading(false)
+    }
+  }, [downloading, placeId, placeName, modelUrl])
 
   // Close annotation list when clicking outside — use 'click' not 'pointerdown'
   // so the dropdown item's own click handler fires first
@@ -603,6 +633,21 @@ export function SplatViewer({ modelUrl, placeId, placeName, onClose }: SplatView
           </div>
         )}
 
+        {/* Download dataset */}
+        {!loading && !error && (
+          <Button
+            variant="ghost"
+            onClick={downloadDataset}
+            disabled={downloading}
+            className="h-8 rounded-full px-3 text-xs font-semibold flex-shrink-0"
+            style={{ color: '#6b7a99', border: '1px solid #c8d8d4', opacity: downloading ? 0.6 : 1 }}
+            title="Download model + annotations as a research dataset"
+          >
+            <Download size={13} className="mr-1.5" />
+            {downloading ? 'Exporting…' : 'Export Dataset'}
+          </Button>
+        )}
+
         {/* Spacer + place name */}
         <div className="flex flex-1 items-center justify-center overflow-hidden px-2">
           {!loading && !error && placeName && (
@@ -646,6 +691,8 @@ export function SplatViewer({ modelUrl, placeId, placeName, onClose }: SplatView
               <button
                 onClick={(e) => {
                   e.stopPropagation()
+                  annotationClickedRef.current = true
+                  setTimeout(() => { annotationClickedRef.current = false }, 50)
                   if (!draggingId) setSelectedAnnotation(ann)
                 }}
                 onMouseEnter={() => setHoveredAnnotation(ann.id)}

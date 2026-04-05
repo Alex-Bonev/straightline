@@ -66,6 +66,56 @@ sourceLabel: "Google Maps Photos". sourceQuote: briefly describe what you see.
 For items you can't assess from photos, use "unknown" with null source fields.`
 }
 
+// ── Resolver agent prompt (targets only unknown items) ─────────────────────
+const ITEM_NAMES: Record<number, string> = {
+  1: 'Accessible Route',
+  2: 'Accessible Entrance',
+  3: 'Door Width & Type',
+  4: 'Ramp Availability',
+  5: 'Accessible Parking',
+  6: 'Elevator / Lift',
+  7: 'Accessible Restroom',
+  8: 'Interior Pathway Width',
+  9: 'Service Counter Height',
+  10: 'Accessible Signage',
+}
+
+function makeResolverTask(name: string, address: string, unknownIds: number[]): string {
+  const QUESTION_MAP: Record<number, string> = {
+    1: 'accessible route or path',
+    2: 'accessible entrance',
+    3: 'wide doors or automatic doors',
+    4: 'wheelchair ramps',
+    5: 'accessible parking or handicap parking',
+    6: 'elevators or lifts',
+    7: 'accessible restrooms or handicap bathrooms',
+    8: 'wide hallways or corridors',
+    9: 'lowered service counters',
+    10: 'accessible signage or braille signs',
+  }
+  const searches = unknownIds.map(id => `  ${id}. Google "Does ${name} have ${QUESTION_MAP[id]}"`).join('\n')
+
+  return `Search Google for ${unknownIds.length} questions about "${name}" at "${address}". For each, read ONLY the Google snippet. Then IMMEDIATELY output the JSON.
+
+Questions:
+${searches}
+
+RULES:
+- ONE Google search per question. Read the snippet. Move on. Do NOT click through.
+- After all ${unknownIds.length} searches, OUTPUT THE JSON. Do nothing else.
+
+CRITICAL — USE INFERENCE, not just explicit statements:
+- Hospitals, airports, malls, multi-story buildings → assume elevators ("met"), wide hallways ("met"), accessible signage ("met") by law.
+- If a snippet mentions "lower level", "floors", "north tower", "parking garage" → infer elevators exist.
+- If it's a large public institution → ADA compliance is legally required, so entrance/route/signage = "met" unless evidence says otherwise.
+- "unknown" is a LAST RESORT. Only use it for niche items (e.g. lowered service counters, braille signs) when you genuinely cannot infer.
+- "not_met" only if the snippet explicitly says the feature is absent or inaccessible.
+
+Output: JSON with ALL 10 items (ids 1-10). Items not in your list → "unknown" with null fields.
+Status: "met"=yes/inferred. "not_met"=explicitly absent. "unknown"=truly can't tell. "na"=not applicable.
+sourceLabel=website. sourceQuote=relevant snippet sentence (or "Inferred: [reason]" if using inference).`
+}
+
 // ── Text agent: direct Google Places API call (instant, no BrowserUse) ──────
 
 interface PlacesApiResult {
@@ -313,11 +363,28 @@ Text: ${raw.slice(0, 3000)}`,
   }
 }
 
+// ── Helper: launch a BrowserUse session ─────────────────────────────────────
+async function launchBrowserUse(task: string): Promise<{ id: string; liveUrl?: string }> {
+  const res = await fetch(`${BROWSER_USE_BASE}/sessions`, {
+    method: 'POST',
+    headers: buHeaders(),
+    body: JSON.stringify({
+      task,
+      model: 'gemini-3-flash',
+      maxCostUsd: 0.05,
+      outputSchema: OUTPUT_SCHEMA,
+    }),
+  })
+  if (res.status === 429) throw new Error('rate_limited')
+  if (!res.ok) throw new Error(`BrowserUse ${res.status}: ${await res.text()}`)
+  const data = await res.json()
+  return { id: data.id, liveUrl: data.live_url ?? data.liveUrl }
+}
+
 // ── POST /api/places/browseruse ─────────────────────────────────────────────
-// Launches 2 agents in parallel:
-//   1. Text agent (instant) — Google Places API for attributes + reviews
-//   2. Visual agent (BrowserUse) — Google Maps photos
-// Text agent result is stored and merged when visual completes.
+// 1. Text agent (instant Google Places API)
+// 2. Visual agent (BrowserUse — photos)
+// 3. Resolver agent (BrowserUse — only if text agent left unknown items)
 
 export async function POST(request: NextRequest) {
   const { name, address, placeId } = await request.json()
@@ -342,89 +409,140 @@ export async function POST(request: NextRequest) {
     console.warn('[browseruse] cache check failed:', e)
   }
 
-  // ── Launch both agents in parallel ────────────────────────────────────────
-  console.log(`[browseruse] launching text (API) + visual (BrowserUse) for: ${name}`)
-
-  const [textResult, visualResult] = await Promise.allSettled([
-    // Text agent: instant API call
-    getTextChecklist(placeId, name),
-    // Visual agent: BrowserUse session
-    fetch(`${BROWSER_USE_BASE}/sessions`, {
-      method: 'POST',
-      headers: buHeaders(),
-      body: JSON.stringify({
-        task: makeVisualTask(name, address),
-        model: 'gemini-3-flash',
-        maxCostUsd: 0.05,
-        outputSchema: OUTPUT_SCHEMA,
-      }),
-    }).then(async res => {
-      if (res.status === 429) throw new Error('rate_limited')
-      if (!res.ok) throw new Error(`BrowserUse ${res.status}: ${await res.text()}`)
-      return res.json()
-    }),
-  ])
-
-  // Store text checklist for later merge
+  // ── Step 1: Run text agent first (instant) ───────────────────────────────
+  console.log(`[browseruse] launching text (API) for: ${name}`)
   let textChecklist: ChecklistItem[] | null = null
-  if (textResult.status === 'fulfilled') {
-    textChecklist = textResult.value.checklist
+  try {
+    const result = await getTextChecklist(placeId, name)
+    textChecklist = result.checklist
     const metCount = textChecklist.filter(i => i.status === 'met').length
-    console.log(`[browseruse] ✓ text agent done instantly — ${metCount} met`)
-  } else {
-    console.warn('[browseruse] text agent failed:', textResult.reason)
+    console.log(`[browseruse] ✓ text agent done — ${metCount} met`)
+  } catch (e) {
+    console.warn('[browseruse] text agent failed:', e)
   }
 
-  // Check visual agent
-  if (visualResult.status === 'rejected') {
+  // ── Step 2: Determine which items are still unknown ──────────────────────
+  const unknownIds = textChecklist
+    ? textChecklist.filter(i => i.status === 'unknown').map(i => i.id)
+    : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  const needsResolver = unknownIds.length > 0
+
+  // ── Step 3: Launch visual + resolver in parallel ─────────────────────────
+  console.log(`[browseruse] launching visual${needsResolver ? ` + resolver (${unknownIds.length} unknown items)` : ''} for: ${name}`)
+
+  const agentPromises: Promise<{ id: string; liveUrl?: string }>[] = [
+    launchBrowserUse(makeVisualTask(name, address)),
+  ]
+  if (needsResolver) {
+    agentPromises.push(launchBrowserUse(makeResolverTask(name, address, unknownIds)))
+  }
+
+  const results = await Promise.allSettled(agentPromises)
+  const visualResult = results[0]
+  const resolverResult = results.length > 1 ? results[1] : null
+
+  // ── Build response ───────────────────────────────────────────────────────
+  const liveUrls: { type: string; url: string }[] = []
+  let visualId: string | null = null
+  let resolverId: string | null = null
+
+  if (visualResult.status === 'fulfilled') {
+    visualId = visualResult.value.id
+    if (visualResult.value.liveUrl) liveUrls.push({ type: 'visual', url: visualResult.value.liveUrl })
+    console.log(`[browseruse] ✓ visual agent started — session: ${visualId}`)
+  } else {
     console.warn('[browseruse] visual agent failed to start:', visualResult.reason)
-    // If text agent succeeded, return its results immediately (no visual)
+  }
+
+  if (resolverResult?.status === 'fulfilled') {
+    resolverId = resolverResult.value.id
+    if (resolverResult.value.liveUrl) liveUrls.push({ type: 'resolver', url: resolverResult.value.liveUrl })
+    console.log(`[browseruse] ✓ resolver agent started — session: ${resolverId}`)
+  } else if (resolverResult?.status === 'rejected') {
+    console.warn('[browseruse] resolver agent failed to start:', resolverResult.reason)
+  }
+
+  // If both BrowserUse agents failed, return text-only
+  if (!visualId && !resolverId) {
     if (textChecklist) {
       const metCount = textChecklist.filter(i => i.status === 'met').length
       const insights = { checklist: textChecklist, metCount }
       void saveToSupabase(name, insights)
       return Response.json({ taskId: 'text-only', textChecklist: JSON.stringify(textChecklist) })
     }
-    return Response.json({ error: 'Both agents failed' }, { status: 502 })
+    return Response.json({ error: 'All agents failed' }, { status: 502 })
   }
 
-  const sessionData = visualResult.value
-  const liveUrl = sessionData.live_url ?? sessionData.liveUrl
-  console.log(`[browseruse] ✓ visual agent started — session: ${sessionData.id}`)
-
-  const liveUrls = liveUrl ? [{ type: 'visual', url: liveUrl }] : []
-
-  // Encode text checklist in the taskId so GET can merge without re-fetching
   const textPayload = textChecklist ? encodeURIComponent(JSON.stringify(textChecklist)) : ''
 
   return Response.json({
-    taskId: `${sessionData.id}`,
+    taskId: visualId ?? resolverId,
+    resolverTaskId: resolverId ?? undefined,
     textChecklist: textPayload,
     liveUrls,
   })
 }
 
-// ── DELETE /api/places/browseruse?taskId=xxx ─────────────────────────────────
+// ── DELETE /api/places/browseruse?taskId=xxx&resolverTaskId=xxx ──────────────
 export async function DELETE(request: NextRequest) {
   const taskId = request.nextUrl.searchParams.get('taskId')
+  const resolverTaskId = request.nextUrl.searchParams.get('resolverTaskId')
   if (!taskId) return Response.json({ error: 'taskId required' }, { status: 400 })
   if (taskId.startsWith('cached:') || taskId === 'text-only') return Response.json({ ok: true })
   if (!process.env.BROWSER_USE_KEY) return Response.json({ ok: false }, { status: 500 })
 
-  fetch(`${BROWSER_USE_BASE}/sessions/${taskId}/stop`, {
-    method: 'PUT',
-    headers: buHeaders(),
-  }).catch(() => {})
+  const stopSession = (id: string) =>
+    fetch(`${BROWSER_USE_BASE}/sessions/${id}/stop`, { method: 'PUT', headers: buHeaders() }).catch(() => {})
+
+  stopSession(taskId)
+  if (resolverTaskId) stopSession(resolverTaskId)
 
   return Response.json({ ok: true })
 }
 
-// ── GET /api/places/browseruse?taskId=xxx&name=xxx&textChecklist=xxx ────────
-// Polls the visual agent, then merges with pre-computed text checklist.
+// ── Helper: poll a single BrowserUse session ────────────────────────────────
+interface SessionPoll {
+  terminal: boolean
+  checklist: ChecklistItem[] | null
+  status: string
+}
+
+async function pollSession(sessionId: string): Promise<SessionPoll> {
+  try {
+    const res = await fetch(`${BROWSER_USE_BASE}/sessions/${sessionId}`, { headers: buHeaders() })
+    if (!res.ok) return { terminal: true, checklist: null, status: 'error' }
+    const data = await res.json()
+
+    if (data.output) {
+      const cl = await parseOutput(data.output)
+      if (cl) {
+        // Stop session if it's still running — we have what we need
+        if (data.status === 'running' || data.status === 'created') {
+          fetch(`${BROWSER_USE_BASE}/sessions/${sessionId}/stop`, { method: 'PUT', headers: buHeaders() }).catch(() => {})
+        }
+        return { terminal: true, checklist: cl, status: 'done' }
+      }
+    }
+
+    if (data.status === 'created' || data.status === 'running') {
+      return { terminal: false, checklist: null, status: data.status }
+    }
+
+    // Terminal without output
+    return { terminal: true, checklist: null, status: data.status }
+  } catch {
+    return { terminal: true, checklist: null, status: 'error' }
+  }
+}
+
+// ── GET /api/places/browseruse ──────────────────────────────────────────────
+// Polls visual + resolver agents, merges with text checklist.
+// Params: taskId, resolverTaskId (optional), name, textChecklist
 export async function GET(request: NextRequest) {
-  const taskId        = request.nextUrl.searchParams.get('taskId')
-  const name          = request.nextUrl.searchParams.get('name') ?? ''
-  const textRaw       = request.nextUrl.searchParams.get('textChecklist')
+  const taskId          = request.nextUrl.searchParams.get('taskId')
+  const resolverTaskId  = request.nextUrl.searchParams.get('resolverTaskId')
+  const name            = request.nextUrl.searchParams.get('name') ?? ''
+  const textRaw         = request.nextUrl.searchParams.get('textChecklist')
   if (!taskId) return Response.json({ error: 'taskId required' }, { status: 400 })
 
   // ── Cached result ─────────────────────────────────────────────────────────
@@ -439,7 +557,7 @@ export async function GET(request: NextRequest) {
     return Response.json({ status: 'error' })
   }
 
-  // ── Text-only result (visual agent failed at POST time) ───────────────────
+  // ── Text-only result (BrowserUse agents failed at POST time) ──────────────
   if (taskId === 'text-only') {
     if (!textRaw) return Response.json({ status: 'error' })
     try {
@@ -463,71 +581,39 @@ export async function GET(request: NextRequest) {
     try { textChecklist = JSON.parse(decodeURIComponent(textRaw)) as ChecklistItem[] } catch {}
   }
 
-  // ── Poll visual agent ─────────────────────────────────────────────────────
-  let res: Response
-  try {
-    res = await fetch(`${BROWSER_USE_BASE}/sessions/${taskId}`, { headers: buHeaders() })
-  } catch (e) {
-    console.error('[browseruse] poll fetch error:', e)
-    // If text agent worked, return that alone
-    if (textChecklist) {
-      const metCount = textChecklist.filter(i => i.status === 'met').length
-      return Response.json({ status: 'done', insights: { checklist: textChecklist, metCount } })
-    }
-    return Response.json({ status: 'error' })
-  }
-  if (!res.ok) {
-    if (textChecklist) {
-      const metCount = textChecklist.filter(i => i.status === 'met').length
-      return Response.json({ status: 'done', insights: { checklist: textChecklist, metCount } })
-    }
-    return Response.json({ status: 'error' })
-  }
+  // ── Poll all active sessions in parallel ──────────────────────────────────
+  const polls = await Promise.all([
+    pollSession(taskId),
+    resolverTaskId ? pollSession(resolverTaskId) : null,
+  ])
 
-  const data = await res.json()
-  console.log(`[browseruse] poll visual — status: ${data.status} | has output: ${!!data.output}`)
+  const visualPoll = polls[0]
+  const resolverPoll = polls[1]
 
-  // Try parsing output early
-  if (data.output) {
-    const visualCl = await parseOutput(data.output)
-    if (visualCl) {
-      const merged = textChecklist ? mergeChecklists(textChecklist, visualCl) : visualCl
-      const metCount = merged.filter(i => i.status === 'met').length
-      const insights = { checklist: merged, metCount }
-      console.log(`[browseruse] ✓ merged text+visual → ${metCount}/10 met`)
-      void saveToSupabase(name, insights)
-      if (data.status === 'running' || data.status === 'created') {
-        fetch(`${BROWSER_USE_BASE}/sessions/${taskId}/stop`, { method: 'PUT', headers: buHeaders() }).catch(() => {})
-      }
-      return Response.json({ status: 'done', insights })
-    }
-  }
+  console.log(`[browseruse] poll — visual: ${visualPoll.status}${visualPoll.checklist ? ' ✓output' : ''}${resolverPoll ? ` | resolver: ${resolverPoll.status}${resolverPoll.checklist ? ' ✓output' : ''}` : ''}`)
 
-  if (data.status === 'created' || data.status === 'running') {
+  // If any session is still running, keep polling
+  const allTerminal = visualPoll.terminal && (!resolverPoll || resolverPoll.terminal)
+  if (!allTerminal) {
     return Response.json({ status: 'loading' })
   }
 
-  // Terminal — visual failed, fall back to text-only
-  if (!data.output || data.status === 'timed_out' || data.status === 'error') {
-    console.warn('[browseruse] visual agent failed — status:', data.status)
-    if (textChecklist) {
-      const metCount = textChecklist.filter(i => i.status === 'met').length
-      const insights = { checklist: textChecklist, metCount }
-      void saveToSupabase(name, insights)
-      return Response.json({ status: 'done', insights })
-    }
-    return Response.json({ status: 'error' })
+  // ── All sessions done — merge results ────────────────────────────────────
+  let merged = textChecklist ?? Array.from({ length: 10 }, (_, i) => ({
+    id: i + 1, status: 'unknown' as const, sourceUrl: null, sourceLabel: null, sourceQuote: null, naReason: null,
+  }))
+
+  if (visualPoll.checklist) {
+    merged = mergeChecklists(merged, visualPoll.checklist)
+  }
+  if (resolverPoll?.checklist) {
+    merged = mergeChecklists(merged, resolverPoll.checklist)
   }
 
-  // Final parse attempt
-  const visualCl = await parseOutput(data.output)
-  const merged = textChecklist && visualCl
-    ? mergeChecklists(textChecklist, visualCl)
-    : (visualCl ?? textChecklist)
-  if (!merged) return Response.json({ status: 'error' })
-
   const metCount = merged.filter(i => i.status === 'met').length
+  const resolvedCount = merged.filter(i => i.status !== 'unknown').length
   const insights = { checklist: merged, metCount }
+  console.log(`[browseruse] ✓ merged all agents → ${metCount}/10 met, ${resolvedCount}/10 resolved`)
   void saveToSupabase(name, insights)
   return Response.json({ status: 'done', insights })
 }

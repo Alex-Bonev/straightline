@@ -25,6 +25,7 @@ import { GoogleMapView, type GoogleMapHandle, type MapPlace } from '@/components
 import { PlacePanel } from '@/components/map/place-panel'
 import { SplatViewer } from '@/components/splat/splat-viewer'
 import { SplatJobPanel } from '@/components/splat/splat-job-panel'
+import { ReconstructModal } from '@/components/map/reconstruct-modal'
 import { supabase } from '@/lib/supabase'
 
 const nunito = Nunito({
@@ -183,8 +184,10 @@ export default function MapPage() {
 
   const [splatJobId, setSplatJobId]           = useState<string | null>(null)
   const [splatModelUrl, setSplatModelUrl]     = useState<string | null>(null)
+  const [splatFlipped, setSplatFlipped]       = useState(false)
   const [showSplatViewer, setShowSplatViewer] = useState(false)
   const [showSplatPanel, setShowSplatPanel]   = useState(false)
+  const [showReconstructModal, setShowReconstructModal] = useState(false)
 
   const [evaluatedNames, setEvaluatedNames]   = useState<Set<string>>(new Set())
 
@@ -352,15 +355,20 @@ export default function MapPage() {
       .from('locations')
       .select('map_3d')
       .eq('name', place.name)
-      .single()
+      .maybeSingle()
 
     const modelUrl: string | null = data?.map_3d?.url ?? null
-    if (!modelUrl) return
 
-    setSplatModelUrl(modelUrl)
-    setShowSplatPanel(false)
-    setSplatJobId(null)
-    setShowSplatViewer(true)
+    if (modelUrl) {
+      setSplatModelUrl(modelUrl)
+      setSplatFlipped(!!data?.map_3d?.flipped)
+      setShowSplatPanel(false)
+      setSplatJobId(null)
+      setShowSplatViewer(true)
+    } else {
+      // No 3D model — show upload modal for reconstruction
+      setShowReconstructModal(true)
+    }
   }, [])
 
   const handleViewExterior = useCallback((place: Place) => {
@@ -651,9 +659,26 @@ export default function MapPage() {
           modelUrl={splatModelUrl}
           placeId={selectedId ?? ''}
           placeName={selectedPlace?.name}
+          flipped={splatFlipped}
           onClose={() => {
             setShowSplatViewer(false)
             setSplatModelUrl(null)
+          }}
+        />
+      )}
+
+      {/* 3D Reconstruction upload modal */}
+      {showReconstructModal && selectedPlace && (
+        <ReconstructModal
+          placeName={selectedPlace.name}
+          placeId={selectedPlace.placeId}
+          onClose={() => setShowReconstructModal(false)}
+          onComplete={(modelUrl) => {
+            setShowReconstructModal(false)
+            setSplatModelUrl(modelUrl)
+            setShowSplatPanel(false)
+            setSplatJobId(null)
+            setShowSplatViewer(true)
           }}
         />
       )}

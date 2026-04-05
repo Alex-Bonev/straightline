@@ -306,6 +306,7 @@ export function PlacePanel({
   // Tracks the active BrowserUse taskId across effect boundaries so we can
   // cancel a running session even if the place changes before POST resolves.
   const buActiveTaskIdRef               = useRef<string | null>(null)
+  const buResolverTaskIdRef             = useRef<string | null>(null)
 
   const [openInfoId, setOpenInfoId]               = useState<number | null>(null)
   const [adaTooltipVisible, setAdaTooltipVisible] = useState(false)
@@ -343,8 +344,11 @@ export function PlacePanel({
     // effect's POST hadn't resolved yet (taskId would have been null in the
     // closure but the ref always holds the latest known taskId).
     if (buActiveTaskIdRef.current) {
-      fetch(`/api/places/browseruse?taskId=${buActiveTaskIdRef.current}`, { method: 'DELETE' })
+      const delParams = new URLSearchParams({ taskId: buActiveTaskIdRef.current })
+      if (buResolverTaskIdRef.current) delParams.set('resolverTaskId', buResolverTaskIdRef.current)
+      fetch(`/api/places/browseruse?${delParams}`, { method: 'DELETE' })
       buActiveTaskIdRef.current = null
+      buResolverTaskIdRef.current = null
     }
 
     let taskId: string | null = null
@@ -366,12 +370,17 @@ export function PlacePanel({
         })
         .then(data => {
           if (cancelled) {
-            if (data.taskId) fetch(`/api/places/browseruse?taskId=${data.taskId}`, { method: 'DELETE' })
+            if (data.taskId) {
+              const dp = new URLSearchParams({ taskId: data.taskId })
+              if (data.resolverTaskId) dp.set('resolverTaskId', data.resolverTaskId)
+              fetch(`/api/places/browseruse?${dp}`, { method: 'DELETE' })
+            }
             return
           }
           if (!data.taskId) { setBuStatus('error'); return }
           taskId = data.taskId
           buActiveTaskIdRef.current = data.taskId
+          if (data.resolverTaskId) buResolverTaskIdRef.current = data.resolverTaskId
           if (Array.isArray(data.liveUrls) && data.liveUrls.length > 0) {
             setAgentLiveUrls(data.liveUrls)
           }
@@ -383,9 +392,17 @@ export function PlacePanel({
             try { setTextChecklistData(JSON.parse(decodeURIComponent(textCl))) } catch {}
           }
 
+          // Build poll URL with optional resolverTaskId
+          const pollParams = new URLSearchParams({
+            taskId: taskId!,
+            name: place.name,
+            textChecklist: textCl,
+          })
+          if (data.resolverTaskId) pollParams.set('resolverTaskId', data.resolverTaskId)
+
           // If text-only result (visual agent failed), resolve immediately
           if (taskId === 'text-only' && textCl) {
-            fetch(`/api/places/browseruse?taskId=text-only&name=${encodeURIComponent(place.name)}&textChecklist=${textCl}`)
+            fetch(`/api/places/browseruse?${pollParams}`)
               .then(r => r.json())
               .then(poll => {
                 if (poll.status === 'done') { setBuInsights(poll.insights); setBuStatus('done') }
@@ -403,18 +420,20 @@ export function PlacePanel({
               return
             }
             try {
-              const r    = await fetch(`/api/places/browseruse?taskId=${taskId}&name=${encodeURIComponent(place.name)}&textChecklist=${textCl}`)
+              const r    = await fetch(`/api/places/browseruse?${pollParams}`)
               const poll = await r.json()
               if (poll.status === 'done') {
                 setBuInsights(poll.insights)
                 setBuStatus('done')
                 buActiveTaskIdRef.current = null
+                buResolverTaskIdRef.current = null
                 setAgentLiveUrls([])
                 setShowAgentModal(false)
                 clearInterval(buPollRef.current!)
               } else if (poll.status === 'error') {
                 setBuStatus('error')
                 buActiveTaskIdRef.current = null
+                buResolverTaskIdRef.current = null
                 setAgentLiveUrls([])
                 setShowAgentModal(false)
                 clearInterval(buPollRef.current!)
@@ -434,8 +453,11 @@ export function PlacePanel({
       // taskId covers the case where the POST resolved before cleanup ran.
       // buActiveTaskIdRef is updated by the next effect mount for place changes.
       if (taskId) {
-        fetch(`/api/places/browseruse?taskId=${taskId}`, { method: 'DELETE' })
+        const dp = new URLSearchParams({ taskId })
+        if (buResolverTaskIdRef.current) dp.set('resolverTaskId', buResolverTaskIdRef.current)
+        fetch(`/api/places/browseruse?${dp}`, { method: 'DELETE' })
         buActiveTaskIdRef.current = null
+        buResolverTaskIdRef.current = null
       }
     }
   }, [place.placeId, place.name, place.address])
@@ -780,6 +802,8 @@ export function PlacePanel({
         <AgentModal
           liveUrls={agentLiveUrls}
           textChecklist={textChecklistData}
+          placeName={place.name}
+          resolverSessionId={buResolverTaskIdRef.current}
           onClose={() => setShowAgentModal(false)}
         />
       )}
