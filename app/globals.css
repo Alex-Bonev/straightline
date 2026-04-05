@@ -168,6 +168,12 @@
     overflow-y: auto;
   }
 
+  /* Close button: overflow-y:auto clips the -top-9 float, so move it inside */
+  .place-panel-wrapper > button {
+    top: 12px !important;
+    right: 12px !important;
+  }
+
   /* Map sidebar — visual drag handle */
   .map-sidebar::before {
     content: '';
