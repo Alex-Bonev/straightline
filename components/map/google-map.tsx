@@ -13,15 +13,12 @@ export interface MapPlace {
   placeId: string
   name: string
   location: { lat: number; lng: number }
-  grade?: string
 }
 
 export interface GoogleMapHandle {
   focusPlace: (location: { lat: number; lng: number }, panelOpen?: boolean) => void
 }
 
-// Offsets a lat/lng by pixel amounts at a given zoom level (Mercator projection).
-// xPixels > 0 moves the center right; yPixels > 0 moves the center down.
 function offsetLatLng(
   location: { lat: number; lng: number },
   xPixels: number,
@@ -49,17 +46,6 @@ interface Props {
   userLocation?: { lat: number; lng: number } | null
 }
 
-function gradeToColor(grade?: string): string {
-  if (!grade) return '#1a73e8'
-  const letter = grade[0].toUpperCase()
-  if (letter === 'A') return '#1e8e3e'
-  if (letter === 'B') return '#1a73e8'
-  if (letter === 'C') return '#f9ab00'
-  if (letter === 'D') return '#fa7b17'
-  return '#d93025'
-}
-
-// Inner component — has access to the map instance via useMap()
 const MapInner = forwardRef<GoogleMapHandle, Props>(function MapInner(
   { center, places, selectedPlaceId, onMarkerClick, onReady, userLocation },
   ref
@@ -77,7 +63,6 @@ const MapInner = forwardRef<GoogleMapHandle, Props>(function MapInner(
     },
   }), [map])
 
-  // Disable all native controls we don't use
   useEffect(() => {
     if (!map) return
     map.setOptions({
@@ -87,7 +72,6 @@ const MapInner = forwardRef<GoogleMapHandle, Props>(function MapInner(
     })
   }, [map])
 
-  // Fire onReady once the map instance is available (tiles loaded)
   useEffect(() => {
     if (!map) return
     const listener = map.addListener('tilesloaded', () => {
@@ -124,7 +108,7 @@ const MapInner = forwardRef<GoogleMapHandle, Props>(function MapInner(
           onClick={() => onMarkerClick?.(place.placeId)}
         >
           <Pin
-            background={gradeToColor(place.grade)}
+            background="#1a73e8"
             borderColor={selectedPlaceId === place.placeId ? '#fff' : 'transparent'}
             glyphColor="#fff"
             scale={selectedPlaceId === place.placeId ? 1.4 : 1}
@@ -135,7 +119,6 @@ const MapInner = forwardRef<GoogleMapHandle, Props>(function MapInner(
   )
 })
 
-// Outer component — wraps APIProvider + Map, passes ref into MapInner
 export function GoogleMapView({
   apiKey,
   mapRef,

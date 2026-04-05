@@ -6,7 +6,6 @@ import { animate, createScope } from 'animejs'
 import { Nunito } from 'next/font/google'
 import { Waves } from '@/components/ui/wave-background'
 import { TextScramble } from '@/components/ui/text-scramble'
-import { Glow } from '@/components/ui/glow'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -17,14 +16,9 @@ import {
   Search,
   MapPin,
   Navigation,
-  Accessibility,
-  ArrowUpDown,
-  ShieldCheck,
-  Car,
   Layers,
   ChevronRight,
   Locate,
-  Loader2,
 } from 'lucide-react'
 import { GoogleMapView, type GoogleMapHandle, type MapPlace } from '@/components/map/google-map'
 import { PlacePanel } from '@/components/map/place-panel'
@@ -44,12 +38,6 @@ interface Place {
   types: string[]
   openNow: boolean | null
   photoRef?: string | null
-  score?: {
-    grade: string
-    tags: string[]
-    summary: string
-  }
-  scoring?: boolean
 }
 
 interface Suggestion {
@@ -57,34 +45,6 @@ interface Suggestion {
   description: string
   mainText: string
   secondaryText: string
-}
-
-function getGradeConfig(grade: string): { bg: string; border: string } {
-  const l = grade[0].toUpperCase()
-  if (l === 'A') return { bg: '#1e8e3e', border: '#1a7a37' }
-  if (l === 'B') return { bg: '#1a73e8', border: '#1557b0' }
-  if (l === 'C') return { bg: '#f9ab00', border: '#d6940a' }
-  if (l === 'D') return { bg: '#fa7b17', border: '#e06c0e' }
-  return { bg: '#d93025', border: '#c5221f' }
-}
-
-function getGlowVars(grade: string): React.CSSProperties {
-  const l = grade[0].toUpperCase()
-  if (l === 'A') return { '--brand': '142 60% 34%', '--brand-foreground': '142 60% 52%' } as React.CSSProperties
-  if (l === 'B') return { '--brand': '211 80% 45%', '--brand-foreground': '211 80% 62%' } as React.CSSProperties
-  if (l === 'C') return { '--brand': '43 96% 44%',  '--brand-foreground': '43 96% 60%'  } as React.CSSProperties
-  if (l === 'D') return { '--brand': '27 96% 48%',  '--brand-foreground': '27 96% 65%'  } as React.CSSProperties
-  return           { '--brand': '4 78% 42%',   '--brand-foreground': '4 78% 60%'   } as React.CSSProperties
-}
-
-function tagIcon(tag: string) {
-  switch (tag) {
-    case 'Wheelchair':  return <Accessibility size={10} />
-    case 'Elevator':    return <ArrowUpDown size={10} />
-    case 'ADA':         return <ShieldCheck size={10} />
-    case 'Parking':     return <Car size={10} />
-    default:            return <MapPin size={10} />
-  }
 }
 
 const LOADING_PHRASES = [
@@ -134,11 +94,7 @@ const SUGGESTED_PROMPTS = [
 ]
 
 function LocationCard({ place, selected, onClick }: { place: Place; selected: boolean; onClick: () => void }) {
-  const grade       = place.score?.grade
-  const gradeConfig = grade ? getGradeConfig(grade) : null
-  const glowVars    = grade ? getGlowVars(grade) : null
-  const accentColor = gradeConfig?.bg ?? '#1a73e8'
-  const photoUrl    = place.photoRef
+  const photoUrl = place.photoRef
     ? `/api/places/photo?ref=${encodeURIComponent(place.photoRef)}&w=200`
     : null
 
@@ -151,13 +107,6 @@ function LocationCard({ place, selected, onClick }: { place: Place; selected: bo
           : 'border-[#eaecf0] hover:shadow-[0_4px_16px_rgba(0,0,0,0.09)] hover:border-[#c8d0e0]'
         }`}
     >
-      {glowVars && !selected && (
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-0" style={glowVars}>
-          <Glow variant="top" className="opacity-[0.12]" />
-        </div>
-      )}
-
-      {/* Photo thumbnail — self-stretch so it fills card height regardless of content */}
       <div className="relative w-[68px] flex-shrink-0 overflow-hidden self-stretch">
         {photoUrl ? (
           <img
@@ -166,41 +115,21 @@ function LocationCard({ place, selected, onClick }: { place: Place; selected: bo
             className="absolute inset-0 h-full w-full object-cover"
           />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: accentColor + '14' }}>
-            <MapPin size={18} style={{ color: accentColor }} />
+          <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: '#1a73e814' }}>
+            <MapPin size={18} style={{ color: '#1a73e8' }} />
           </div>
         )}
       </div>
 
       <div className="relative flex min-w-0 flex-1 flex-col justify-center px-3.5 py-3">
-        <div className="flex items-center gap-2">
-          <h3 className="truncate text-[13.5px] font-bold leading-snug transition-colors"
-            style={{ color: selected ? '#1a52b4' : '#1a2035' }}>
-            {place.name}
-          </h3>
-          {place.scoring && <Loader2 size={11} className="animate-spin flex-shrink-0" style={{ color: '#9aa0b8' }} />}
-          {grade && !place.scoring && (
-            <span className="flex-shrink-0 rounded-full px-1.5 py-[2px] text-[9px] font-black text-white leading-none"
-              style={{ backgroundColor: gradeConfig?.bg }}>
-              {grade}
-            </span>
-          )}
-        </div>
+        <h3 className="truncate text-[13.5px] font-bold leading-snug transition-colors"
+          style={{ color: selected ? '#1a52b4' : '#1a2035' }}>
+          {place.name}
+        </h3>
         <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium truncate" style={{ color: '#6b7a99' }}>
           <MapPin size={9} className="flex-shrink-0" />
           <span className="truncate">{place.address}</span>
         </p>
-        {place.score && place.score.tags.length > 0 && (
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {place.score.tags.slice(0, 3).map((tag) => (
-              <Badge key={tag} className="inline-flex h-auto items-center gap-0.5 rounded-full border-none px-1.5 py-[2px] text-[9px] font-semibold leading-none"
-                style={{ backgroundColor: selected ? '#dce8fe' : '#e8f0fe', color: '#1a52b4' }}>
-                {tagIcon(tag)}
-                {tag}
-              </Badge>
-            ))}
-          </div>
-        )}
       </div>
     </Card>
   )
@@ -237,27 +166,6 @@ export default function MapPage() {
     return () => scopeRef.current?.revert()
   }, [])
 
-  const scorePlace = useCallback(async (placeId: string) => {
-    setPlaces((prev) => prev.map((p) => p.placeId === placeId ? { ...p, scoring: true } : p))
-    try {
-      const detailRes  = await fetch(`/api/places/details?placeId=${placeId}`)
-      const detailData = await detailRes.json()
-      if (!detailData.detail) return
-      const scoreRes  = await fetch('/api/score', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ detail: detailData.detail }),
-      })
-      const scoreData = await scoreRes.json()
-      setPlaces((prev) => prev.map((p) => p.placeId === placeId ? { ...p, scoring: false, score: scoreData.score } : p))
-      nearbyPlacesRef.current = nearbyPlacesRef.current.map((p) =>
-        p.placeId === placeId ? { ...p, scoring: false, score: scoreData.score } : p
-      )
-    } catch {
-      setPlaces((prev) => prev.map((p) => p.placeId === placeId ? { ...p, scoring: false } : p))
-    }
-  }, [])
-
   const fetchNearby = useCallback(async (loc: { lat: number; lng: number }) => {
     setLoading(true)
     setVisibleCount(5)
@@ -272,12 +180,10 @@ export default function MapPage() {
       }))
       nearbyPlacesRef.current = raw
       setPlaces(raw)
-      // Do NOT auto-select on boot — user picks their own first result
-      ;(async () => { for (const p of raw.slice(0, 5)) await scorePlace(p.placeId) })()
     } finally {
       setLoading(false)
     }
-  }, [scorePlace])
+  }, [])
 
   const handleSearch = useCallback(async (searchQuery: string) => {
     if (!searchQuery.trim()) return
@@ -339,21 +245,19 @@ export default function MapPage() {
         setPlaces(fallback)
         setSelectedId(fallback[0].placeId)
         mapHandleRef.current?.focusPlace(fallback[0].location, true)
-        ;(async () => { for (const p of fallback.slice(0, 5)) await scorePlace(p.placeId) })()
         return
       }
 
       setPlaces(raw)
       setSelectedId(raw[0].placeId)
       mapHandleRef.current?.focusPlace(raw[0].location, true)
-      ;(async () => { for (const p of raw.slice(0, 5)) await scorePlace(p.placeId) })()
     } catch (err) {
       setSearchError(`Request failed: ${err instanceof Error ? err.message : 'unknown error'}`)
       setPlaces([])
     } finally {
       setLoading(false)
     }
-  }, [userLocation, mapCenter, scorePlace])
+  }, [userLocation, mapCenter])
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
@@ -378,8 +282,7 @@ export default function MapPage() {
     }
     setSelectedId(place.placeId)
     mapHandleRef.current?.focusPlace(place.location, true)
-    if (!place.score && !place.scoring) scorePlace(place.placeId)
-  }, [selectedId, scorePlace])
+  }, [selectedId])
 
   const handleQueryChange = (value: string) => {
     setQuery(value)
@@ -425,7 +328,7 @@ export default function MapPage() {
     if (userLocation) { setMapCenter({ ...userLocation }); mapHandleRef.current?.focusPlace(userLocation) }
   }
 
-  const mapPlaces: MapPlace[]   = places.map((p) => ({ placeId: p.placeId, name: p.name, location: p.location, grade: p.score?.grade }))
+  const mapPlaces: MapPlace[] = places.map((p) => ({ placeId: p.placeId, name: p.name, location: p.location }))
   const selectedPlace           = places.find(p => p.placeId === selectedId) ?? null
 
   // Show selected card first, then rest in original order
