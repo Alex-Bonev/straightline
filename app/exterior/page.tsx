@@ -3,7 +3,20 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Suspense } from 'react'
-import { ArrowLeft, PenTool, MessageSquare, Tag, Trash2 } from 'lucide-react'
+import {
+  ArrowLeft,
+  PenTool,
+  MessageSquare,
+  Tag,
+  Trash2,
+  TrendingUp,
+  ArrowUpDown,
+  Accessibility,
+  ParkingSquare,
+  AlertTriangle,
+  MapPin,
+  Wand2,
+} from 'lucide-react'
 import { Nunito } from 'next/font/google'
 import {
   APIProvider,
@@ -12,6 +25,7 @@ import {
   GestureHandling,
   Marker3D,
   AltitudeMode,
+  Pin,
   type Map3DRef,
   type Map3DClickEvent,
 } from '@vis.gl/react-google-maps'
@@ -48,6 +62,24 @@ const LABEL_OPTIONS = [
   'other',
 ] as const
 
+const LABEL_STYLES: Record<string, { bg: string; border: string; glyph: string }> = {
+  accessible_entrance: { bg: '#009E85', border: '#007a67', glyph: '#fff' },
+  accessible_parking:  { bg: '#3b82f6', border: '#2563eb', glyph: '#fff' },
+  ramp:                { bg: '#f59e0b', border: '#d97706', glyph: '#fff' },
+  hazard:              { bg: '#ef4444', border: '#dc2626', glyph: '#fff' },
+  other:               { bg: '#6b7280', border: '#4b5563', glyph: '#fff' },
+}
+
+function LabelIcon({ label, size, className }: { label: string; size?: number; className?: string }) {
+  switch (label) {
+    case 'accessible_entrance': return <Accessibility size={size} className={className} />
+    case 'accessible_parking':  return <ParkingSquare size={size} className={className} />
+    case 'ramp':                return <TrendingUp size={size} className={className} />
+    case 'hazard':              return <AlertTriangle size={size} className={className} />
+    default:                    return <MapPin size={size} className={className} />
+  }
+}
+
 // ── Inner component (uses useSearchParams — must be inside Suspense) ──────────
 
 function ExteriorView() {
@@ -72,6 +104,12 @@ function ExteriorView() {
   const [editingAnnotation,  setEditingAnnotation]  = useState(false)
   const [editNote,           setEditNote]           = useState('')
   const [editLabel,          setEditLabel]          = useState<typeof LABEL_OPTIONS[number]>('accessible_entrance')
+  const [showAnnotationList, setShowAnnotationList] = useState(false)
+  const [hoveredAnnotation,  setHoveredAnnotation]  = useState<string | null>(null)
+  const [autoStatus, setAutoStatus] = useState<'idle' | 'street_view' | 'analyzing' | 'done' | 'error'>('idle')
+  const [autoTaskId, setAutoTaskId] = useState<string | null>(null)
+  const [autoError,  setAutoError]  = useState<string | null>(null)
+  const [autoSummary, setAutoSummary] = useState<string | null>(null)
 
   const handleMapClick = useCallback((e: Map3DClickEvent) => {
     if (!annotateMode) return
@@ -160,6 +198,126 @@ function ExteriorView() {
     setEditingAnnotation(false)
   }, [selectedAnnotation, editNote, editLabel])
 
+  // Close annotation list when clicking outside
+  useEffect(() => {
+    if (!showAnnotationList) return
+    const close = () => setShowAnnotationList(false)
+    window.addEventListener('click', close)
+    return () => window.removeEventListener('click', close)
+  }, [showAnnotationList])
+
+  // Poll auto-annotate status
+  useEffect(() => {
+    if (!autoTaskId || autoStatus === 'done' || autoStatus === 'error' || autoStatus === 'idle') return
+
+    const interval = setInterval(async () => {
+      try {
+        const params = new URLSearchParams({
+          taskId: autoTaskId,
+          placeId: scopedId,
+          lat: String(lat),
+          lng: String(lng),
+          name,
+        })
+        const res = await fetch(`/api/annotations/auto?${params}`)
+        const data = await res.json()
+
+        if (data.status === 'loading') {
+          setAutoStatus(data.step === 'street_view' ? 'street_view' : 'analyzing')
+          return
+        }
+
+        if (data.status === 'done') {
+          clearInterval(interval)
+          const newAnns = data.annotations ?? []
+          if (newAnns.length > 0) {
+            setAnnotations(prev => [...prev, ...newAnns])
+            const counts: Record<string, number> = {}
+            for (const a of newAnns) {
+              const readable = a.label.replace(/_/g, ' ')
+              counts[readable] = (counts[readable] ?? 0) + 1
+            }
+            const parts = Object.entries(counts).map(([k, v]) => `${v} ${k}${v > 1 ? 's' : ''}`)
+            setAutoSummary(`Added ${newAnns.length} annotation${newAnns.length > 1 ? 's' : ''} (${parts.join(', ')})`)
+          } else {
+            setAutoSummary('No features detected — try annotating manually')
+          }
+          setAutoStatus('done')
+          setAutoTaskId(null)
+          setTimeout(() => setAutoSummary(null), 8000)
+          return
+        }
+
+        if (data.status === 'error') {
+          clearInterval(interval)
+          setAutoError(data.message ?? 'Auto-annotation failed')
+          setAutoStatus('error')
+          setAutoTaskId(null)
+          setTimeout(() => { setAutoError(null); setAutoStatus('idle') }, 8000)
+          return
+        }
+      } catch {
+        clearInterval(interval)
+        setAutoError('Network error')
+        setAutoStatus('error')
+        setAutoTaskId(null)
+        setTimeout(() => { setAutoError(null); setAutoStatus('idle') }, 8000)
+      }
+    }, 6000)
+
+    return () => clearInterval(interval)
+  }, [autoTaskId, autoStatus, scopedId, lat, lng, name])
+
+  const startAutoAnnotate = useCallback(async () => {
+    setAutoStatus('street_view')
+    setAutoError(null)
+    setAutoSummary(null)
+
+    try {
+      const res = await fetch('/api/annotations/auto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ placeId: scopedId, lat, lng, name, address }),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        if (data.error === 'no_checklist') {
+          setAutoError('Run an ADA scan from the map panel first')
+        } else {
+          setAutoError(data.error ?? 'Failed to start auto-annotation')
+        }
+        setAutoStatus('error')
+        setTimeout(() => { setAutoError(null); setAutoStatus('idle') }, 8000)
+        return
+      }
+
+      setAutoTaskId(data.taskId)
+    } catch {
+      setAutoError('Network error')
+      setAutoStatus('error')
+      setTimeout(() => { setAutoError(null); setAutoStatus('idle') }, 8000)
+    }
+  }, [scopedId, lat, lng, name, address])
+
+  // Fly camera to an annotation
+  const focusAnnotation = useCallback((ann: ExteriorAnnotation) => {
+    const map = map3dRef.current
+    if (map) {
+      map.flyCameraTo({
+        endCamera: {
+          center: { lat: ann.position.lat, lng: ann.position.lng, altitude: ann.position.altitude },
+          tilt: 60,
+          range: 50,
+        },
+        durationMillis: 1000,
+      })
+    }
+    setShowAnnotationList(false)
+    setSelectedAnnotation(ann)
+    setEditingAnnotation(false)
+  }, [])
+
   return (
     <div className={`${nunito.className} flex h-screen items-stretch p-3`} style={{ backgroundColor: '#e0f5f1' }}>
       <div className="flex flex-1 flex-col overflow-hidden rounded-2xl bg-white" style={{ boxShadow: '0 4px 24px rgba(0,158,133,0.12)' }}>
@@ -209,14 +367,69 @@ function ExteriorView() {
           {annotateMode ? 'Annotating…' : 'Annotate'}
         </button>
 
+        <button
+          onClick={startAutoAnnotate}
+          disabled={autoStatus !== 'idle' && autoStatus !== 'done' && autoStatus !== 'error'}
+          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black transition-colors disabled:opacity-60"
+          style={{ backgroundColor: '#e0f5f1', color: '#007a67' }}
+          title="Automatically detect and annotate entrances, ramps, and stairs using AI"
+        >
+          <Wand2 size={11} className={autoStatus === 'street_view' || autoStatus === 'analyzing' ? 'animate-pulse' : ''} />
+          {autoStatus === 'street_view' && 'Scanning Street View…'}
+          {autoStatus === 'analyzing' && 'Analyzing images…'}
+          {autoStatus !== 'street_view' && autoStatus !== 'analyzing' && 'Auto-Annotate'}
+        </button>
+
         {annotations.length > 0 && (
-          <span
-            className="flex items-center gap-1 flex-shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold"
-            style={{ backgroundColor: '#e0f5f1', color: '#007a67' }}
-          >
-            <MessageSquare size={11} />
-            {annotations.length}
-          </span>
+          <div className="relative flex-shrink-0">
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowAnnotationList(v => !v) }}
+              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black transition-colors hover:bg-[#c8f0e8]"
+              style={{ backgroundColor: '#e0f5f1', color: '#007a67', border: '1px solid #009E85' }}
+            >
+              <MessageSquare size={11} />
+              Visit Annotations
+            </button>
+
+            {showAnnotationList && (
+              <div
+                className="absolute left-0 top-[calc(100%+8px)] z-50 w-72 overflow-hidden rounded-xl bg-white/95 backdrop-blur-md"
+                style={{ border: '1px solid rgba(0,158,133,0.18)', boxShadow: '0 8px 28px rgba(0,0,0,0.12)' }}
+                onClick={e => e.stopPropagation()}
+              >
+                <p className="px-3 pt-3 pb-1.5 text-[9px] font-black uppercase tracking-[0.12em]" style={{ color: '#9aa0b8' }}>
+                  Annotations
+                </p>
+                <div className="max-h-56 overflow-y-auto pb-2">
+                  {annotations.map(ann => {
+                    const style = LABEL_STYLES[ann.label] ?? LABEL_STYLES.other
+                    return (
+                      <button
+                        key={ann.id}
+                        onClick={() => focusAnnotation(ann)}
+                        className="flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[#edfaf7]"
+                      >
+                        <span
+                          className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full"
+                          style={{ backgroundColor: style.bg }}
+                        >
+                          <LabelIcon label={ann.label} size={10} className="text-white" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-[11px] font-bold capitalize" style={{ color: '#1a2035' }}>
+                            {ann.label.replace(/_/g, ' ')}
+                          </p>
+                          <p className="truncate text-[10px]" style={{ color: '#6b7a99' }}>
+                            {ann.note.length > 38 ? ann.note.slice(0, 38) + '…' : ann.note}
+                          </p>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         <span
@@ -244,20 +457,30 @@ function ExteriorView() {
             onClick={handleMapClick}
             style={{ width: '100%', height: '100%' }}
           >
-            {annotations.map(ann => (
-              <Marker3D
-                key={ann.id}
-                position={{ lat: ann.position.lat, lng: ann.position.lng, altitude: ann.position.altitude }}
-                altitudeMode={AltitudeMode.CLAMP_TO_GROUND}
-                drawsWhenOccluded
-                sizePreserved
-                title={ann.note}
-                onClick={() => {
-                  setSelectedAnnotation(ann)
-                  setEditingAnnotation(false)
-                }}
-              />
-            ))}
+            {annotations.map(ann => {
+              const style = LABEL_STYLES[ann.label] ?? LABEL_STYLES.other
+              return (
+                <Marker3D
+                  key={ann.id}
+                  position={{ lat: ann.position.lat, lng: ann.position.lng, altitude: ann.position.altitude }}
+                  altitudeMode={AltitudeMode.CLAMP_TO_GROUND}
+                  drawsWhenOccluded
+                  sizePreserved
+                  title={`[${ann.label.replace(/_/g, ' ')}] ${ann.note}`}
+                  onClick={() => {
+                    setSelectedAnnotation(ann)
+                    setEditingAnnotation(false)
+                  }}
+                >
+                  <Pin
+                    background={style.bg}
+                    borderColor={style.border}
+                    glyphColor={style.glyph}
+                    scale={1.1}
+                  />
+                </Marker3D>
+              )
+            })}
           </Map3D>
         </APIProvider>
 
@@ -268,6 +491,20 @@ function ExteriorView() {
             style={{ background: 'rgba(0,158,133,0.85)', color: 'white', backdropFilter: 'blur(8px)' }}
           >
             Click on the map to place an annotation · Esc to exit
+          </div>
+        )}
+
+        {/* Auto-annotate status toast */}
+        {(autoError || autoSummary) && (
+          <div
+            className="pointer-events-none absolute top-4 left-1/2 z-30 -translate-x-1/2 rounded-full px-4 py-2 text-[10px] font-semibold"
+            style={{
+              background: autoError ? 'rgba(239,68,68,0.9)' : 'rgba(0,158,133,0.9)',
+              color: 'white',
+              backdropFilter: 'blur(8px)',
+            }}
+          >
+            {autoError ?? autoSummary}
           </div>
         )}
 
@@ -383,10 +620,13 @@ function ExteriorView() {
               <>
                 <div className="mb-2 flex items-start justify-between gap-2">
                   <span
-                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wider"
-                    style={{ backgroundColor: '#e0f5f1', color: '#007a67' }}
+                    className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wider"
+                    style={{
+                      backgroundColor: (LABEL_STYLES[selectedAnnotation.label] ?? LABEL_STYLES.other).bg + '18',
+                      color: (LABEL_STYLES[selectedAnnotation.label] ?? LABEL_STYLES.other).bg,
+                    }}
                   >
-                    <Tag size={9} />
+                    <LabelIcon label={selectedAnnotation.label} size={10} />
                     {selectedAnnotation.label.replace(/_/g, ' ')}
                   </span>
                   <div className="flex items-center gap-0.5">
