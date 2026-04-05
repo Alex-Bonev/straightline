@@ -8,12 +8,18 @@ export async function GET(
 ) {
   const { jobId } = await params
 
-  const res = await fetch(`${RUNPOD_URL}/api/jobs/${jobId}/status`)
+  try {
+    const res = await fetch(`${RUNPOD_URL}/api/jobs/${jobId}/status`, {
+      signal: AbortSignal.timeout(10000),
+    })
 
-  if (!res.ok) {
-    return Response.json({ error: 'Job not found' }, { status: res.status })
+    if (!res.ok) {
+      return Response.json({ error: 'Job not found' }, { status: res.status })
+    }
+
+    const data = await res.json()
+    return Response.json(data)
+  } catch {
+    return Response.json({ status: 'running', stage: '', progress: 0, message: 'Waiting for server...' })
   }
-
-  const data = await res.json()
-  return Response.json(data)
 }

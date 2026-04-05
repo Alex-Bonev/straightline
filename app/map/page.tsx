@@ -145,6 +145,7 @@ function LocationCard({ place, selected, onClick, onView3D }: { place: Place; se
     ? `/api/places/photo?ref=${encodeURIComponent(place.photoRef)}&w=200`
     : null
 
+  return (
     <Card
       onClick={onClick}
       className={`relative flex-row gap-0 overflow-hidden rounded-2xl border p-0 shadow-sm transition-all duration-200 cursor-pointer group min-h-[76px]
@@ -255,26 +256,8 @@ export default function MapPage() {
     return () => scopeRef.current?.revert()
   }, [])
 
-  const scorePlace = useCallback(async (placeId: string) => {
-    setPlaces((prev) => prev.map((p) => p.placeId === placeId ? { ...p, scoring: true } : p))
-    try {
-      const detailRes  = await fetch(`/api/places/details?placeId=${placeId}`)
-      const detailData = await detailRes.json()
-      if (!detailData.detail) return
-      const scoreRes  = await fetch('/api/score', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ detail: detailData.detail }),
-      })
-      const scoreData = await scoreRes.json()
-      setPlaces((prev) => prev.map((p) => p.placeId === placeId ? { ...p, scoring: false, score: scoreData.score } : p))
-      nearbyPlacesRef.current = nearbyPlacesRef.current.map((p) =>
-        p.placeId === placeId ? { ...p, scoring: false, score: scoreData.score } : p
-      )
-    } catch {
-      setPlaces((prev) => prev.map((p) => p.placeId === placeId ? { ...p, scoring: false } : p))
-    }
-  }, [])
+  // Scoring is now handled by BrowserUse in the PlacePanel
+  const scorePlace = useCallback(async (_placeId: string) => {}, [])
 
   const fetchNearby = useCallback(async (loc: { lat: number; lng: number }) => {
     setLoading(true)
@@ -446,24 +429,12 @@ export default function MapPage() {
     if (userLocation) { setMapCenter({ ...userLocation }); mapHandleRef.current?.focusPlace(userLocation) }
   }
 
-  const handleView3D = useCallback(async (place: Place) => {
-    try {
-      const res = await fetch('/api/splat/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lat: place.location.lat, lng: place.location.lng }),
-      })
-      const data = await res.json()
-      if (data.status === 'done' && data.model_url) {
-        setSplatModelUrl(data.model_url)
-        setShowSplatViewer(true)
-      } else if (data.job_id) {
-        setSplatJobId(data.job_id)
-        setShowSplatPanel(true)
-      }
-    } catch {
-      // Silently fail — user can retry
-    }
+  const handleView3D = useCallback(async (_place: Place) => {
+    // Use hardcoded demo model for now
+    setSplatModelUrl('/model.spz')
+    setShowSplatPanel(false)
+    setSplatJobId(null)
+    setShowSplatViewer(true)
   }, [])
 
   const mapPlaces: MapPlace[]   = places.map((p) => ({ placeId: p.placeId, name: p.name, location: p.location, grade: p.score?.grade }))
@@ -526,6 +497,7 @@ export default function MapPage() {
             key={selectedPlace.placeId}
             place={selectedPlace}
             onClose={() => setSelectedId(null)}
+            onView3D={() => handleView3D(selectedPlace)}
           />
         )}
       </main>
@@ -683,6 +655,7 @@ export default function MapPage() {
       {showSplatViewer && splatModelUrl && (
         <SplatViewer
           modelUrl={splatModelUrl}
+          placeId={selectedId ?? ''}
           onClose={() => {
             setShowSplatViewer(false)
             setSplatModelUrl(null)

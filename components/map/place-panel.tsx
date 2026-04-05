@@ -117,9 +117,11 @@ function ComplianceSkeletons({ count }: { count: number }) {
 export function PlacePanel({
   place,
   onClose,
+  onView3D,
 }: {
   place: Place
   onClose: () => void
+  onView3D?: () => void
 }) {
   const wrapperRef                = useRef<HTMLDivElement>(null)
   const [photoUrls, setPhotoUrls] = useState<string[]>([])
@@ -471,7 +473,8 @@ export function PlacePanel({
             role="button"
             tabIndex={0}
             aria-label="Enter Projective View"
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') e.currentTarget.click() }}
+            onClick={onView3D}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onView3D?.() }}
           >
             <EtheralShadow
               className="absolute inset-0"
