@@ -3,15 +3,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { animate, stagger } from 'animejs'
-import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EtheralShadow } from '@/components/ui/etheral-shadow'
 import { TextScramble } from '@/components/ui/text-scramble'
 import {
   ChevronLeft, ChevronRight, MapPin,
-  Accessibility, ShieldCheck, ArrowUpDown, Car,
-  Globe, X, CheckCircle2, AlertTriangle,
+  Globe, X,
 } from 'lucide-react'
 
 interface Place {
@@ -19,14 +17,21 @@ interface Place {
   name: string
   address: string
   types: string[]
-  score?: { grade: string; tags: string[]; summary: string }
+}
+
+type ChecklistItemStatus = 'met' | 'not_met' | 'unknown' | 'na'
+
+interface ChecklistItem {
+  id: number
+  status: ChecklistItemStatus
+  sourceUrl: string | null
+  sourceQuote: string | null
+  naReason: string | null
 }
 
 interface BrowserUseInsights {
-  adaPercent: number
-  grade: string
-  compliance: string[]
-  limitations: string[]
+  checklist: ChecklistItem[]
+  metCount: number
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -51,22 +56,158 @@ function shortAddress(address: string): string {
   return address.split(',')[0].trim()
 }
 
-function gradeStyle(grade: string) {
-  const l = grade[0].toUpperCase()
-  if (l === 'A') return { bg: '#1e8e3e', label: 'Excellent' }
-  if (l === 'B') return { bg: '#1a73e8', label: 'Good' }
-  if (l === 'C') return { bg: '#f9ab00', label: 'Fair' }
-  if (l === 'D') return { bg: '#fa7b17', label: 'Poor' }
-  return             { bg: '#d93025', label: 'Critical' }
+const CHECKLIST_INFO: Record<number, { label: string; explanation: string; adaRef: string }> = {
+  1:  { label: 'Accessible Route',       explanation: 'A continuous, obstacle-free path from public street or parking to the entrance — including curb cuts and no stairs.', adaRef: 'Priority 1 · Section 1A' },
+  2:  { label: 'Accessible Entrance',    explanation: 'Step-free entry usable without assistance. Includes automatic doors or push-button openers. Must not require using a separate side entrance.', adaRef: 'Priority 1 · Section 1B' },
+  3:  { label: 'Door Width & Type',      explanation: 'Entry doors must provide at least 32" of clear width. Automatic openers or push-button assistors count toward compliance.', adaRef: 'Priority 1 · Section 1C' },
+  4:  { label: 'Ramp Availability',      explanation: 'Where level changes exist, a ramp must be present with a slope no steeper than 1:12 (one inch of rise per 12 inches of run).', adaRef: 'Priority 1 · Section 1D' },
+  5:  { label: 'Accessible Parking',     explanation: 'Designated accessible parking spaces with a proper access aisle, located as close as possible to the accessible entrance.', adaRef: 'Priority 1 · Section 1A' },
+  6:  { label: 'Elevator / Lift',        explanation: 'If the building has more than one story, an elevator or platform lift must serve all publicly accessible floors.', adaRef: 'Priority 2 · Section 2B' },
+  7:  { label: 'Accessible Restroom',    explanation: 'At least one restroom must have grab bars, sufficient turning radius (60"), and fixtures reachable from a wheelchair.', adaRef: 'Priority 3 · Section 3A' },
+  8:  { label: 'Interior Pathway Width', explanation: 'Interior corridors and aisles must be at least 36" wide and kept free of obstructions to allow wheelchair navigation.', adaRef: 'Priority 2 · Section 2A' },
+  9:  { label: 'Service Counter Height', explanation: 'At least one section of any service or reception counter must be no higher than 36" to be reachable from a seated wheelchair position.', adaRef: 'Priority 2 · Section 2F' },
+  10: { label: 'Accessible Signage',     explanation: 'The International Symbol of Accessibility (ISA) must mark accessible entrances, restrooms, parking, and routes throughout the facility.', adaRef: 'Priority 2 · Section 2G' },
 }
 
-function TagIcon({ tag }: { tag: string }) {
-  const t = tag.toLowerCase()
-  if (t.includes('wheelchair'))  return <Accessibility size={10} />
-  if (t.includes('elevator'))    return <ArrowUpDown   size={10} />
-  if (t.includes('ada'))         return <ShieldCheck   size={10} />
-  if (t.includes('parking'))     return <Car           size={10} />
-  return <MapPin size={10} />
+function statusStyle(status: ChecklistItemStatus) {
+  switch (status) {
+    case 'met':     return { icon: '✓', itemBg: '#f0f9f0', itemBorder: '#1e8e3e', iconColor: '#1e8e3e', slideColor: '#1e8e3e' }
+    case 'not_met': return { icon: '✗', itemBg: '#fff8f0', itemBorder: '#fa7b17', iconColor: '#fa7b17', slideColor: '#fa7b17' }
+    case 'na':      return { icon: '—', itemBg: '#f5f5f8', itemBorder: '#ccc',    iconColor: '#9aa0b8', slideColor: '#ccc'    }
+    default:        return { icon: '?', itemBg: '#f5f5f8', itemBorder: '#ccc',    iconColor: '#9aa0b8', slideColor: '#ccc'    }
+  }
+}
+
+function ChecklistRow({
+  item,
+  isOpen,
+  onToggle,
+}: {
+  item: ChecklistItem
+  isOpen: boolean
+  onToggle: () => void
+}) {
+  const info = CHECKLIST_INFO[item.id]
+  const { icon, itemBg, itemBorder, iconColor, slideColor } = statusStyle(item.status)
+
+  return (
+    <div>
+      {/* Row */}
+      <div style={{
+        background: itemBg,
+        border: `1.5px solid ${itemBorder}`,
+        borderRadius: 8,
+        padding: '7px 9px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 7,
+        position: 'relative',
+        zIndex: 2,
+      }}>
+        <span style={{ color: iconColor, fontSize: 13, flexShrink: 0, width: 14, textAlign: 'center', fontWeight: 700 }}>
+          {icon}
+        </span>
+        <span style={{ fontWeight: 700, fontSize: 10.5, color: '#1a2035', flex: 1, minWidth: 0, lineHeight: 1.3 }}>
+          {info.label}
+        </span>
+        <button
+          onClick={onToggle}
+          style={{
+            fontSize: 8,
+            fontWeight: 800,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            padding: '3px 6px',
+            borderRadius: 4,
+            background: isOpen ? '#1a52b4' : '#e8f0fe',
+            color: isOpen ? 'white' : '#1a52b4',
+            border: 'none',
+            cursor: 'pointer',
+            flexShrink: 0,
+          }}
+          aria-label={`${isOpen ? 'Hide' : 'Show'} info for ${info.label}`}
+        >
+          INFO
+        </button>
+      </div>
+
+      {/* Slide-out card */}
+      <div style={{
+        background: 'white',
+        border: `1.5px solid ${isOpen ? slideColor : 'transparent'}`,
+        borderTop: 'none',
+        borderRadius: '0 0 8px 8px',
+        maxHeight: isOpen ? 320 : 0,
+        overflow: 'hidden',
+        transition: 'max-height 0.28s ease, padding 0.28s ease, border-color 0.15s ease',
+        padding: isOpen ? '11px 9px 10px' : '0 9px',
+        marginTop: -4,
+        position: 'relative',
+        zIndex: 1,
+      }}>
+        {/* Explanation */}
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#9aa0b8', marginBottom: 3 }}>
+            Explanation
+          </div>
+          <div style={{ fontSize: 11, color: '#2d3a50', lineHeight: 1.55 }}>{info.explanation}</div>
+          <div style={{ fontSize: 9, color: '#b0b8d0', marginTop: 3, fontStyle: 'italic' }}>{info.adaRef}</div>
+        </div>
+
+        {/* Divider */}
+        <div style={{ height: 1, background: '#eef0f4', margin: '8px 0' }} />
+
+        {/* Referenced source */}
+        <div>
+          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#9aa0b8', marginBottom: 4 }}>
+            Referenced Source
+          </div>
+          {item.status === 'na' ? (
+            <div style={{ fontSize: 11, color: '#9aa0b8', fontStyle: 'italic' }}>
+              {item.naReason ?? 'Not applicable for this location.'}
+            </div>
+          ) : item.sourceQuote ? (
+            <>
+              <div style={{
+                fontSize: 11, color: '#2d3a50', fontStyle: 'italic', lineHeight: 1.5,
+                background: '#f5f8ff', borderLeft: '3px solid #1a73e8',
+                padding: '6px 8px', borderRadius: '0 4px 4px 0', marginBottom: 5,
+              }}>
+                &ldquo;{item.sourceQuote}&rdquo;
+              </div>
+              {item.sourceUrl && (
+                <a
+                  href={item.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ fontSize: 10, color: '#1a73e8', textDecoration: 'none', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 3 }}
+                >
+                  🔗 View source →
+                </a>
+              )}
+            </>
+          ) : (
+            <div style={{ fontSize: 11, color: '#9aa0b8', fontStyle: 'italic' }}>
+              No source found. Insufficient information available from web sources for this location.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ChecklistSkeleton() {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 7, padding: '7px 9px',
+      borderRadius: 8, background: '#f5f5f8', border: '1.5px solid #e8eaed',
+    }}>
+      <Skeleton className="h-3.5 w-3.5 rounded-full flex-shrink-0" />
+      <Skeleton className="h-3 flex-1 rounded" />
+      <Skeleton className="h-4 w-8 rounded" />
+    </div>
+  )
 }
 
 // ── PlaceTitle: wrapping animated title ──────────────────────────────────────
@@ -99,20 +240,6 @@ function PlaceTitle({ text }: { text: string }) {
   )
 }
 
-// ── ComplianceSkeletons ───────────────────────────────────────────────────────
-function ComplianceSkeletons({ count }: { count: number }) {
-  return (
-    <div className="flex flex-col gap-2">
-      {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="flex items-center gap-2">
-          <Skeleton className="h-2.5 w-2.5 rounded-full flex-shrink-0" />
-          <Skeleton className="h-3" style={{ width: `${65 + (i % 3) * 15}%` }} />
-        </div>
-      ))}
-    </div>
-  )
-}
-
 // ── Component ─────────────────────────────────────────────────────────────────
 export function PlacePanel({
   place,
@@ -132,16 +259,8 @@ export function PlacePanel({
   const buPollRef                       = useRef<ReturnType<typeof setInterval> | null>(null)
   const buPollCountRef                  = useRef(0)
 
-  // Derived insights: BrowserUse data when ready, fall back to score/defaults
-  const scoreGrade = place.score?.grade ?? 'B'
-  const insights = {
-    grade:       buInsights?.grade      ?? scoreGrade,
-    adaPercent:  buInsights?.adaPercent ?? null,
-    compliance:  buInsights?.compliance ?? null,
-    limitations: buInsights?.limitations ?? null,
-    tags:        place.score?.tags ?? [],
-  }
-  const g   = gradeStyle(insights.grade)
+  const [openInfoId, setOpenInfoId]               = useState<number | null>(null)
+  const [adaTooltipVisible, setAdaTooltipVisible] = useState(false)
 
   // ── Fetch photos ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -268,7 +387,7 @@ export function PlacePanel({
               <PlaceTitle text={place.name} />
             </div>
 
-            {/* Type · address · tags */}
+            {/* Type · address */}
             <div className="flex items-center gap-2 overflow-hidden mt-2" style={{ whiteSpace: 'nowrap' }}>
               <span className="flex-shrink-0 text-[11px] font-semibold" style={{ color: '#9aa0b8' }}>
                 {typeLabel(place.types)}
@@ -278,20 +397,6 @@ export function PlacePanel({
                 <MapPin size={10} className="flex-shrink-0" />
                 <span className="truncate">{shortAddress(place.address)}</span>
               </span>
-              {insights.tags.length > 0 && (
-                <>
-                  <span style={{ color: '#d0d5e0' }} className="flex-shrink-0">·</span>
-                  <div className="flex items-center gap-1 overflow-hidden flex-shrink-0">
-                    {insights.tags.map(tag => (
-                      <Badge key={tag}
-                        className="inline-flex h-auto items-center gap-0.5 rounded-full border-none px-1.5 py-[2px] text-[9px] font-semibold leading-none flex-shrink-0"
-                        style={{ backgroundColor: '#e8f0fe', color: '#1a52b4' }}>
-                        <TagIcon tag={tag} />{tag}
-                      </Badge>
-                    ))}
-                  </div>
-                </>
-              )}
             </div>
           </div>
 
@@ -336,8 +441,8 @@ export function PlacePanel({
           className="pp-s opacity-0"
           style={{ background: 'linear-gradient(160deg, #eef3ff 0%, #f5f8ff 100%)', borderBottom: '1px solid #dce6fc' }}
         >
-          {/* Header: title (left) ↔ large pct + grade (right) */}
-          <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-0">
+          {/* Header */}
+          <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-0">
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: '#1a73e8' }}>
                 <Globe size={17} className="text-white" />
@@ -352,98 +457,87 @@ export function PlacePanel({
                     BETA
                   </span>
                 </div>
-                {buStatus === 'loading' ? (
-                  <div className="mt-1 flex items-center gap-1.5">
+                <div className="flex items-center gap-1 mt-1">
+                  <p className="text-[11px] font-semibold" style={{ color: '#6b7a99' }}>
+                    ADA Accessibility Checklist
+                  </p>
+                  {/* ADA info tooltip */}
+                  <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                    <span
+                      onMouseEnter={() => setAdaTooltipVisible(true)}
+                      onMouseLeave={() => setAdaTooltipVisible(false)}
+                      style={{ width: 14, height: 14, borderRadius: '50%', background: '#e8f0fe', color: '#1a52b4', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'help', flexShrink: 0 }}
+                    >
+                      i
+                    </span>
+                    {adaTooltipVisible && (
+                      <div style={{ position: 'absolute', left: 18, top: -4, width: 210, background: '#1a2035', color: 'white', fontSize: 10, padding: '8px 10px', borderRadius: 7, lineHeight: 1.5, zIndex: 50, pointerEvents: 'none' }}>
+                        The Americans with Disabilities Act (ADA) is a federal civil rights law requiring physical accessibility for people with disabilities in public places.
+                        <div style={{ position: 'absolute', left: -4, top: 8, width: 8, height: 8, background: '#1a2035', transform: 'rotate(45deg)' }} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {buStatus === 'loading' && (
+                  <div className="flex items-center gap-1.5 mt-0.5">
                     <span className="inline-block h-1.5 w-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#1a73e8' }} />
                     <span className="text-[11px] font-semibold" style={{ color: '#1a73e8' }}>
                       Scanning accessibility data…
                     </span>
                   </div>
-                ) : (
-                  <p className="mt-1 text-[11px] font-semibold" style={{ color: '#6b7a99' }}>
-                    ADA Compliance Analysis
-                  </p>
                 )}
               </div>
             </div>
 
-            {/* Percentage + grade — same font size */}
-            <div className="flex items-center gap-2 flex-shrink-0">
+            {/* X / 10 count */}
+            <div className="flex-shrink-0 text-right">
               {buStatus === 'loading' ? (
-                <div className="flex items-center gap-2">
-                  <div className="flex flex-col items-center gap-1">
-                    <Skeleton className="h-11 w-16 rounded-lg" />
-                    <Skeleton className="h-2.5 w-12 rounded" />
-                  </div>
-                  <Skeleton className="h-[2px] w-4" />
-                  <Skeleton className="h-16 w-14 rounded-xl" />
-                </div>
+                <Skeleton className="h-7 w-16 rounded-lg" />
               ) : (
-                <>
-                  <div className="text-center">
-                    <p className="text-[46px] font-black leading-none tracking-tight" style={{ color: '#1a2035' }}>
-                      {insights.adaPercent ?? '--'}%
-                    </p>
-                    <p className="text-[8px] font-bold uppercase tracking-widest mt-1" style={{ color: '#9aa0b8' }}>ADA met</p>
-                  </div>
-                  <span className="text-[28px] font-thin" style={{ color: '#d0d5e0' }}>/</span>
-                  <div className="flex flex-col items-center rounded-xl px-3.5 py-2" style={{ backgroundColor: g.bg }}>
-                    <span className="text-[46px] font-black leading-none tracking-tight text-white">{insights.grade}</span>
-                    <span className="text-[8px] font-bold uppercase tracking-widest text-white/60 mt-1">{g.label}</span>
-                  </div>
-                </>
+                <div>
+                  <span className="text-[28px] font-black leading-none tracking-tight" style={{ color: '#1a2035' }}>
+                    {buInsights?.metCount ?? 0}
+                  </span>
+                  <span className="text-[16px] font-bold" style={{ color: '#9aa0b8' }}>
+                    {' '}/ 10
+                  </span>
+                  <p className="text-[8px] font-bold uppercase tracking-widest mt-0.5" style={{ color: '#9aa0b8' }}>
+                    items confirmed
+                  </p>
+                </div>
               )}
             </div>
           </div>
 
-          {/* Progress bar */}
-          <div className="mx-6 mt-3 mb-4 h-[5px] overflow-hidden rounded-full" style={{ backgroundColor: '#d4defa' }}>
-            {buStatus === 'loading' ? (
-              <Skeleton className="h-full w-full rounded-full" />
-            ) : (
-              <div
-                className="h-full rounded-full transition-all duration-700"
-                style={{ width: `${insights.adaPercent ?? 0}%`, background: 'linear-gradient(90deg, #1a73e8, #34a853)' }}
-              />
-            )}
-          </div>
-
-          {/* Compliance + Limitations */}
-          <div className="grid grid-cols-2 gap-0 px-6 pb-5">
-            <div className="pr-5" style={{ borderRight: '1px solid #dce6fc' }}>
-              <p className="mb-2.5 text-[12px] font-black uppercase tracking-wide" style={{ color: '#1e8e3e' }}>
-                Areas of Compliance
-              </p>
-              {buStatus === 'loading' ? (
-                <ComplianceSkeletons count={4} />
-              ) : (
-                <div className="flex flex-col gap-1.5">
-                  {(insights.compliance ?? []).map(item => (
-                    <div key={item} className="flex items-start gap-2">
-                      <CheckCircle2 size={11} className="mt-0.5 flex-shrink-0" style={{ color: '#1e8e3e' }} />
-                      <span className="text-[11px] font-medium leading-snug" style={{ color: '#2d3a50' }}>{item}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+          {/* Checklist grid — 2 columns of 5 */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 10px', padding: '14px 20px 16px' }}>
+            {/* Column 1: items 1–5 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {buStatus === 'loading'
+                ? Array.from({ length: 5 }).map((_, i) => <ChecklistSkeleton key={i} />)
+                : (buInsights?.checklist ?? []).slice(0, 5).map(item => (
+                    <ChecklistRow
+                      key={item.id}
+                      item={item}
+                      isOpen={openInfoId === item.id}
+                      onToggle={() => setOpenInfoId(openInfoId === item.id ? null : item.id)}
+                    />
+                  ))
+              }
             </div>
-
-            <div className="pl-5">
-              <p className="mb-2.5 text-[12px] font-black uppercase tracking-wide" style={{ color: '#fa7b17' }}>
-                Limitations
-              </p>
-              {buStatus === 'loading' ? (
-                <ComplianceSkeletons count={2} />
-              ) : (
-                <div className="flex flex-col gap-1.5">
-                  {(insights.limitations ?? []).map(item => (
-                    <div key={item} className="flex items-start gap-2">
-                      <AlertTriangle size={11} className="mt-0.5 flex-shrink-0" style={{ color: '#fa7b17' }} />
-                      <span className="text-[11px] font-medium leading-snug" style={{ color: '#2d3a50' }}>{item}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+            {/* Column 2: items 6–10 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {buStatus === 'loading'
+                ? Array.from({ length: 5 }).map((_, i) => <ChecklistSkeleton key={i} />)
+                : (buInsights?.checklist ?? []).slice(5, 10).map(item => (
+                    <ChecklistRow
+                      key={item.id}
+                      item={item}
+                      isOpen={openInfoId === item.id}
+                      onToggle={() => setOpenInfoId(openInfoId === item.id ? null : item.id)}
+                    />
+                  ))
+              }
             </div>
           </div>
         </div>
