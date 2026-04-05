@@ -139,7 +139,7 @@ export function GoogleMapView({
         defaultZoom={14}
         gestureHandling="greedy"
         style={{ width: '100%', height: '100%' }}
-        mapTypeControlOptions={{ position: 7 }}
+        mapTypeControl={false}
         fullscreenControl={false}
         zoomControl={false}
       >
