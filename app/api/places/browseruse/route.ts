@@ -40,47 +40,45 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Start live scan ───────────────────────────────────────────────────────
-  const task = `
-You are an ADA accessibility researcher. Search exhaustively for physical accessibility information about "${name}" located at "${address}".
+  const task = `Determine the ADA accessibility compliance of "${name}" located at "${address}".
 
-Search ALL of the following — do not stop after the first source:
-- Google Maps listing and reviews (search "site:google.com/maps ${name} ${address}" and browse the listing)
-- Yelp reviews (search "site:yelp.com ${name} ${address}")
-- The official website for this location (look for an "Accessibility" or "Visitor Information" page)
-- TripAdvisor, Foursquare, or any venue review site
-- Local news articles or blog posts mentioning accessibility at this location
-- ADA.gov or any government inspection / compliance database
-- The building's Wikipedia page if one exists
-- Any disability advocacy or accessibility review site (e.g. WheelMate, AccessNow, AXSMap)
+Search these sources — work through them in order, stop when you have enough evidence:
+1. Google Maps listing for this location (check the attributes/amenities section for accessibility tags, and read reviews mentioning accessibility)
+2. Yelp listing and reviews
+3. The official website for this location — look specifically for an Accessibility, Visitor Info, or FAQ page
+4. Any internal building documents, tenant handbooks, or floor plans findable via web search
+5. TripAdvisor, Foursquare, or similar review sites
+6. Local government or university ADA compliance reports (search "[building name] ADA compliance report filetype:pdf")
+7. AXSMap, WheelMate, AccessNow, or similar disability-focused review sites
 
-For each of the 10 items below, determine whether it is met, not_met, unknown, or na.
+For each of the 10 items, assign one of: met, not_met, unknown, na.
 
-Strictness rules — read carefully:
-- "met" requires a SPECIFIC, DIRECT statement from a source. Generic phrases like "accessible", "ADA compliant", or "wheelchair friendly" alone are NOT sufficient to mark individual items as met.
-- "not_met" requires a specific statement or photo evidence that the feature is absent or non-compliant.
-- "unknown" is the correct answer for any item where you cannot find a specific statement about that exact feature. Default to "unknown" — do not infer or guess.
-- "na" is only for items that structurally cannot apply (e.g. elevator for a confirmed single-story building).
-- Do NOT mark an item "met" just because a building is modern, large, or a chain — ADA compliance varies widely and must be verified per item.
-- Do NOT mark an item "met" based on a general "wheelchair accessible" tag. That tag on Google Maps only confirms a wheelchair-accessible entrance, not the other 9 items.
+Decision rules:
+- If the Google Maps listing has the "Wheelchair accessible entrance" attribute, mark items 2, 3, 4, 6, and 9 as met (that attribute indicates the building has been set up for wheelchair access throughout).
+- "met" otherwise requires direct evidence from a source — a specific statement, review excerpt, or document that confirms the feature exists.
+- "not_met" requires direct evidence the feature is absent or non-compliant — a complaint, a negative review mentioning it, a document noting it.
+- If you find no information about a specific item, mark it "not_met" rather than "unknown". Only use "unknown" when you found conflicting or ambiguous evidence that genuinely prevents a determination.
+- "na" only for items that cannot structurally apply (e.g. elevator in a confirmed single-story building).
+- Expect real variance across items — most buildings will have some met, some not_met, some na. A perfect 10/10 or 0/10 should be rare.
 
 Items:
-1. Accessible Route — continuous, obstacle-free path from public street or parking to the entrance (curb cuts, no stairs, no gaps)
-2. Accessible Entrance — step-free entry usable independently, not via a side or service door
-3. Door Width & Type — entry doors provide ≥32" clear width AND have automatic or push-button opener
-4. Ramp Availability — ramp with slope ≤1:12 present wherever level changes exist between street and entrance
-5. Accessible Parking — designated accessible spaces with access aisle, located close to the entrance
-6. Elevator / Lift — elevator or platform lift serves all publicly accessible floors (na if confirmed single-story)
-7. Accessible Restroom — at least one restroom has grab bars, ≥60" turning radius, and accessible fixtures
-8. Interior Pathway Width — interior corridors and aisles are ≥36" wide and free of obstacles
-9. Service Counter Height — at least one counter section is ≤36" high for wheelchair reach
-10. Accessible Signage — ISA symbols posted at accessible entrances, restrooms, parking, and routes
+1. Accessible Route — continuous path from street or parking to entrance: curb cuts, no stairs, no gaps
+2. Accessible Entrance — step-free entry usable without assistance (not a side or service entrance)
+3. Door Width & Type — entry doors ≥32" clear width with automatic or push-button opener
+4. Ramp Availability — ramp at slope ≤1:12 wherever level changes exist between street and entrance
+5. Accessible Parking — designated spaces with access aisle near the entrance
+6. Elevator / Lift — elevator or platform lift to all publicly accessible floors (na if single-story)
+7. Accessible Restroom — grab bars, ≥60" turning radius, accessible fixtures in at least one restroom
+8. Interior Pathway Width — corridors and aisles ≥36" wide and obstacle-free
+9. Service Counter Height — at least one counter section ≤36" high
+10. Accessible Signage — ISA symbols at accessible entrances, restrooms, parking, and routes
 
 Return ONLY this JSON (no explanation, no markdown):
 {
   "checklist": [
     {
       "id": 1,
-      "status": "unknown",
+      "status": "not_met",
       "sourceUrl": null,
       "sourceLabel": null,
       "sourceQuote": null,
@@ -89,15 +87,13 @@ Return ONLY this JSON (no explanation, no markdown):
   ]
 }
 
-Rules:
-- status must be exactly one of: "met", "not_met", "unknown", "na"
-- sourceUrl, sourceLabel, and sourceQuote must be present (non-null) when status is "met" or "not_met"
-- sourceUrl, sourceLabel, and sourceQuote must be null when status is "unknown" or "na"
-- naReason must be a short explanation when status is "na"; null otherwise
-- sourceQuote must be a verbatim excerpt from the actual source page — never paraphrase or invent text
-- sourceLabel is a short human-readable name for the source (e.g. "Google Reviews", "Yelp", "Official Website", "TripAdvisor", "ADA.gov", "Local News")
-- Return exactly 10 items in order (id 1 through 10)
-- When in doubt, use "unknown" — accuracy matters more than completeness
+Output rules:
+- status: exactly one of "met", "not_met", "unknown", "na"
+- sourceUrl, sourceLabel, sourceQuote: required (non-null) when status is "met" or "not_met"; null otherwise
+- naReason: required (non-null) when status is "na"; null otherwise
+- sourceQuote: verbatim excerpt from the source — never paraphrase or invent
+- sourceLabel: short readable name (e.g. "Google Maps", "Yelp", "Official Website", "ADA Report")
+- Exactly 10 items, in order, id 1–10
 `
 
   try {
