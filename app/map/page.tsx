@@ -338,16 +338,14 @@ export default function MapPage() {
 
         setPlaces(fallback)
         setSelectedId(fallback[0].placeId)
-        setMapCenter(fallback[0].location)
-        mapHandleRef.current?.focusPlace(fallback[0].location)
+        mapHandleRef.current?.focusPlace(fallback[0].location, true)
         ;(async () => { for (const p of fallback.slice(0, 5)) await scorePlace(p.placeId) })()
         return
       }
 
       setPlaces(raw)
       setSelectedId(raw[0].placeId)
-      setMapCenter(raw[0].location)
-      mapHandleRef.current?.focusPlace(raw[0].location)
+      mapHandleRef.current?.focusPlace(raw[0].location, true)
       ;(async () => { for (const p of raw.slice(0, 5)) await scorePlace(p.placeId) })()
     } catch (err) {
       setSearchError(`Request failed: ${err instanceof Error ? err.message : 'unknown error'}`)
@@ -379,8 +377,7 @@ export default function MapPage() {
       return
     }
     setSelectedId(place.placeId)
-    setMapCenter(place.location)
-    mapHandleRef.current?.focusPlace(place.location)
+    mapHandleRef.current?.focusPlace(place.location, true)
     if (!place.score && !place.scoring) scorePlace(place.placeId)
   }, [selectedId, scorePlace])
 
@@ -475,7 +472,8 @@ export default function MapPage() {
 
         <Button
           variant="outline" size="icon" onClick={handleLocateMe}
-          className="absolute bottom-6 right-5 z-20 rounded-full border-[#dadce0] bg-white hover:bg-[#f1f3f4]"
+          className="absolute z-20 rounded-full border-[#dadce0] bg-white hover:bg-[#f1f3f4]"
+          style={{ bottom: 62, right: 10 }}
           style={{ boxShadow: '0 2px 10px rgba(0,0,0,0.14)' }}
           aria-label="Center on my location"
         >

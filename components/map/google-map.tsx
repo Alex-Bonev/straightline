@@ -17,7 +17,27 @@ export interface MapPlace {
 }
 
 export interface GoogleMapHandle {
-  focusPlace: (location: { lat: number; lng: number }) => void
+  focusPlace: (location: { lat: number; lng: number }, panelOpen?: boolean) => void
+}
+
+// Offsets a lat/lng by pixel amounts at a given zoom level (Mercator projection).
+// xPixels > 0 moves the center right; yPixels > 0 moves the center down.
+function offsetLatLng(
+  location: { lat: number; lng: number },
+  xPixels: number,
+  yPixels: number,
+  zoom: number
+): { lat: number; lng: number } {
+  const scale   = Math.pow(2, zoom)
+  const worldX  = ((location.lng + 180) / 360) * 256
+  const sinLat  = Math.sin((location.lat * Math.PI) / 180)
+  const worldY  = (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * 256
+  const newX    = worldX + xPixels / scale
+  const newY    = worldY + yPixels / scale
+  const newLng  = (newX / 256) * 360 - 180
+  const n       = Math.PI - (2 * Math.PI * newY) / 256
+  const newLat  = (Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))) * 180) / Math.PI
+  return { lat: newLat, lng: newLng }
 }
 
 interface Props {
@@ -47,10 +67,12 @@ const MapInner = forwardRef<GoogleMapHandle, Props>(function MapInner(
   const map = useMap()
 
   useImperativeHandle(ref, () => ({
-    focusPlace(location) {
+    focusPlace(location, panelOpen = false) {
       if (map) {
-        map.panTo(location)
-        map.setZoom(17)
+        const zoom   = 17
+        const target = offsetLatLng(location, -100, panelOpen ? 100 : 0, zoom)
+        map.panTo(target)
+        map.setZoom(zoom)
       }
     },
   }), [map])
@@ -117,6 +139,9 @@ export function GoogleMapView({
         defaultZoom={14}
         gestureHandling="greedy"
         style={{ width: '100%', height: '100%' }}
+        mapTypeControlOptions={{ position: 7 }}
+        fullscreenControl={false}
+        zoomControl={false}
       >
         <MapInner ref={mapRef} {...props} />
       </Map>
