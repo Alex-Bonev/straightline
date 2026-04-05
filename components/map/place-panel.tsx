@@ -254,10 +254,12 @@ export function PlacePanel({
   place,
   onClose,
   onView3D,
+  onViewExterior,
 }: {
   place: Place
   onClose: () => void
   onView3D?: () => void
+  onViewExterior?: () => void
 }) {
   const wrapperRef                = useRef<HTMLDivElement>(null)
   const [photoUrls, setPhotoUrls] = useState<string[]>([])
@@ -614,8 +616,9 @@ export function PlacePanel({
           )}
         </div>
 
-        {/* ── 3 · Projective View ───────────────────────────── */}
-        <div className="pp-s px-5 py-4 opacity-0">
+        {/* ── 3 · Actions ───────────────────────────── */}
+        <div className="pp-s flex flex-col gap-3 px-5 py-4 opacity-0">
+          {/* Projective View */}
           <div
             className="relative overflow-hidden rounded-2xl cursor-pointer transition-transform duration-200 hover:scale-[1.015] active:scale-[0.99]"
             style={{ height: 80, backgroundColor: '#050820' }}
@@ -641,6 +644,36 @@ export function PlacePanel({
                 className="text-[15px] font-black tracking-tight text-white"
               >
                 Enter Projective View
+              </TextScramble>
+            </div>
+          </div>
+
+          {/* View Building Exterior */}
+          <div
+            className="relative overflow-hidden rounded-2xl cursor-pointer transition-transform duration-200 hover:scale-[1.015] active:scale-[0.99]"
+            style={{ height: 80, backgroundColor: '#003d33' }}
+            role="button"
+            tabIndex={0}
+            aria-label="View Building Exterior"
+            onClick={onViewExterior}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') e.currentTarget.click() }}
+          >
+            <EtheralShadow
+              className="absolute inset-0"
+              color="rgba(0, 158, 133, 1)"
+              animation={{ scale: 80, speed: 60 }}
+              noise={{ opacity: 0.4, scale: 1.1 }}
+              sizing="fill"
+            />
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1">
+              <TextScramble
+                as="span"
+                trigger={scramble}
+                duration={0.9}
+                speed={0.033}
+                className="text-[15px] font-black tracking-tight text-white"
+              >
+                View Building Exterior
               </TextScramble>
             </div>
           </div>
